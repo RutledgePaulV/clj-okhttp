@@ -2,6 +2,7 @@
   (:require [clj-okhttp.protocols :as protos]
             [clj-okhttp.utilities :as utils]
             [clojure.string :as strings]
+            [clj-okhttp.muuntaja :as mun]
             [muuntaja.core :as m])
   (:import [clojure.lang IPersistentMap]
            [okhttp3 Request]
@@ -34,19 +35,25 @@
       ([request respond raise]
        (handler request (comp respond transform) raise)))))
 
+(def muuntaja-factory
+  (memoize (fn [opts] (m/create opts))))
+
+(defn wrap-init-muuntaja [handler]
+  (letfn [(init-muuntaja [request]
+            (muuntaja-factory (or (:muuntaja request) mun/defaults)))]
+    (fn init-muuntaja-handler
+      ([request]
+       (handler (assoc request :muuntaja (init-muuntaja request))))
+      ([request respond raise]
+       (handler (assoc request :muuntaja (init-muuntaja request)) respond raise)))))
 
 (defn wrap-decode-responses [handler]
   (fn decode-response-handler
     ([request]
-     (let [muuntaja (:muuntaja request)
-           response (handler (dissoc request :muuntaja))]
+     (let [response (handler request)]
        (if (not= (:as request) :stream)
          (with-open [_ ^InputStream (:body response)]
-           (let [original  (get-in response [:headers "content-type"])
-                 augmented (update-in response [:headers "Content-Type"] #(or % original))]
-             (if (some? muuntaja)
-               (assoc response :body (m/decode-response-body muuntaja augmented))
-               (assoc response :body (m/decode-response-body augmented)))))
+           (mun/format-response request response))
          response)))
     ([request respond raise]
      (handler request
@@ -55,57 +62,21 @@
                   (respond
                     (if (not= (:as request) :stream)
                       (with-open [_ ^InputStream (:body response)]
-                        (let [original  (get-in response [:headers "content-type"])
-                              augmented (update-in response [:headers "Content-Type"] #(or % original))]
-                          (if-some [muuntaja (:muuntaja request)]
-                            (assoc response :body (m/decode-response-body muuntaja augmented))
-                            (assoc response :body (m/decode-response-body augmented)))))
+                        (mun/format-response request response))
                       response))
-                  (catch Exception e
+                  (catch Throwable e
                     (raise e))))
               raise))))
 
-
 (defn wrap-encode-requests [handler]
-  #_(letfn [(coerce-request [{:keys [body form-params] :as request}]
-              (let [muuntaja     (:muuntaja request)
-                    content-type (get-in request [:headers "content-type"])
-                    content      (or body form-params)
-                    new-body     (cond
-                                   (nil? body)
-                                   nil
-                                   (or (instance? InputStream body) (bytes? body))
-                                   body
-                                   (string? body)
-                                   (.getBytes body)
-                                   :otherwise
-                                   (let [response (m/encode muuntaja content-type content)]
-                                     (proxy [RequestBody] []
-                                       (contentLength []
-                                         (if (bytes? response) (alength response) -1))
-                                       (contentType []
-                                         content-type)
-                                       (writeTo [^BufferedSink sink]
-                                         (cond
-                                           (instance? IFn response)
-                                           (response (.outputStream sink))
-                                           (instance? InputStream response)
-                                           (io/copy response (.outputStream sink))
-                                           (bytes? response)
-                                           (.write sink ^bytes response 0 (alength response))))
-                                       (isOneShot []
-                                         (and (not (bytes? response)) (not (string? response)))))))]
-                (cond-> request
-                  (some? new-body)
-                  (assoc :body new-body)
-                  :always
-                  (dissoc :form-params))))]
-      (fn encode-request-handler
-        ([request]
-         (handler (coerce-request request)))
-        ([request respond raise]
-         (handler (coerce-request request) respond raise))))
-  handler)
+  (fn encode-request-handler
+    ([request]
+     (handler (mun/format-request request)))
+    ([request respond raise]
+     (try
+       (handler (mun/format-request request) respond raise)
+       (catch Throwable e
+         (raise e))))))
 
 
 (defn wrap-basic-authentication [handler]
