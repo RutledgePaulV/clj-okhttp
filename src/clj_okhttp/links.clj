@@ -1,6 +1,8 @@
 (ns clj-okhttp.links
   "Copied from https://github.com/dakrone/clj-http")
 
+(set! *warn-on-reflection* true)
+
 (def ^:private quoted-string
   #"\"((?:[^\"]|\\\")*)\"")
 

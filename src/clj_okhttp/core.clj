@@ -4,6 +4,8 @@
            [clojure.lang IFn]
            [java.util Map]))
 
+(set! *warn-on-reflection* true)
+
 (def default-middleware
   [mw/wrap-init-muuntaja
    mw/wrap-basic-authentication
@@ -12,8 +14,8 @@
    mw/wrap-lowercase-response-headers
    mw/wrap-okhttp-request-url
    mw/wrap-okhttp-request-body
-   mw/wrap-okhttp-response-body
    mw/wrap-okhttp-request-headers
+   mw/wrap-okhttp-response-body
    mw/wrap-okhttp-response-headers
    mw/wrap-okhttp-request-response])
 
@@ -117,8 +119,7 @@
                                 (on-closed socket code reason))
                               (onFailure [socket throwable response]
                                 (on-failure socket throwable response)
-                                (when (some? response)
-                                  (raise throwable))))]
+                                (raise throwable)))]
                         (.newWebSocket client request listener)))
         handler+mw  (->> (rseq (or (not-empty (:middleware request))
                                    default-middleware))

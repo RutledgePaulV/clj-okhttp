@@ -6,6 +6,7 @@
            [java.io FilterInputStream InputStream]
            [clojure.lang IPersistentMap]))
 
+(set! *warn-on-reflection* true)
 
 (defn ->url ^HttpUrl [url query-params]
   (let [[^HttpUrl http-url segments]
