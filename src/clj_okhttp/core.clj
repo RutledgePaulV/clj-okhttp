@@ -5,14 +5,17 @@
            [java.util Map]))
 
 (def default-middleware
-  [mw/wrap-throw-exceptional-responses
-   mw/wrap-lowercase-response-headers
-   mw/wrap-parse-link-headers
-   mw/wrap-init-muuntaja
-   mw/wrap-encode-requests
-   mw/wrap-decode-responses
+  [mw/wrap-init-muuntaja
    mw/wrap-basic-authentication
-   mw/wrap-to-and-from-data])
+   mw/wrap-parse-link-headers
+   mw/wrap-decode-responses
+   mw/wrap-lowercase-response-headers
+   mw/wrap-okhttp-request-url
+   mw/wrap-okhttp-request-body
+   mw/wrap-okhttp-response-body
+   mw/wrap-okhttp-request-headers
+   mw/wrap-okhttp-response-headers
+   mw/wrap-okhttp-request-response])
 
 (defn- http-handler
   (^Map [^OkHttpClient client ^Request request]
@@ -49,22 +52,23 @@
      (.newWebSocket client request listener))))
 
 (defn- compile-handler [handler middleware]
-  (reduce #(%2 %1) handler (rseq middleware)))
+  (reduce #(%2 %1) handler (rseq (vec middleware))))
 
 (defn create-client
-  (^OkHttpClient [] (create-client {}))
+  (^OkHttpClient []
+   (create-client {}))
   (^OkHttpClient [{:keys [] :as opts}]
    (OkHttpClient.)))
 
 (defn request*
   (^Map [^OkHttpClient client request]
-   (let [handler    (partial http-handler client)
+   (let [handler    #(http-handler client %)
          handler+mw (if (not-empty (:middleware request))
                       (compile-handler handler (:middleware request))
                       (compile-handler handler default-middleware))]
      (handler+mw request)))
   (^Call [^OkHttpClient client request respond raise]
-   (let [handler    (partial http-handler client)
+   (let [handler    #(http-handler client %)
          handler+mw (if (not-empty (:middleware request))
                       (compile-handler handler (:middleware request))
                       (compile-handler handler default-middleware))]
@@ -131,11 +135,14 @@
                       on-closed  (fn default-on-closed-callback [socket code reason])
                       on-failure (fn default-on-failure-callback [socket exception response])}}]
   (let [[open-prom failure-prom] [(promise) (promise)]
-        handler     (partial websocket-handler client open-prom failure-prom
-                             {:on-bytes   on-bytes
-                              :on-text    on-text
-                              :on-closing on-closing
-                              :on-closed  on-closed})
+        handler     #(websocket-handler
+                       client
+                       open-prom failure-prom
+                       {:on-bytes   on-bytes
+                        :on-text    on-text
+                        :on-closing on-closing
+                        :on-closed  on-closed}
+                       %1 %2 %3)
         handler+mw  (if (not-empty (:middleware upgrade-request))
                       (compile-handler handler (:middleware upgrade-request))
                       (compile-handler handler default-middleware))

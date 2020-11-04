@@ -20,7 +20,7 @@
 (defn format-request [{:keys [muuntaja form-params body] :as request}]
   (let [request-content-type (get-in request [:headers "content-type"])
         negotitated          ^FormatAndCharset (negotiate-content-type muuntaja request-content-type)
-        request-body         (when (some? request-content-type)
+        request-body         (if (some? request-content-type)
                                (let [response (m/encode muuntaja
                                                         (.-format negotitated)
                                                         body
@@ -50,10 +50,9 @@
                                        (instance? InputStream response)
                                        (io/copy response (.outputStream sink))))
                                    (isOneShot []
-                                     (not (bytes? response))))))]
-    (if (some? request-content-type)
-      (assoc request :body request-body)
-      request)))
+                                     (not (bytes? response)))))
+                               nil)]
+    (assoc request :body request-body)))
 
 (defn format-response [{:keys [muuntaja] :as request} {:keys [body] :as response}]
   (let [response-content-type (get-in response [:headers "content-type"])
@@ -61,6 +60,8 @@
         response-body         (m/decode muuntaja (.-format negotitated) body (.-charset negotitated))]
     (assoc response :body response-body)))
 
-
 (def defaults
   (assoc m/default-options :return :output-stream))
+
+(def muuntaja-factory
+  (memoize (fn [opts] (m/create opts))))

@@ -1,30 +1,13 @@
 (ns clj-okhttp.middleware
-  (:require [clj-okhttp.protocols :as protos]
-            [clj-okhttp.utilities :as utils]
+  (:require [clj-okhttp.utilities :as utils]
             [clojure.string :as strings]
             [clj-okhttp.muuntaja :as mun]
-            [muuntaja.core :as m])
-  (:import [clojure.lang IPersistentMap]
-           [okhttp3 Request]
-           [java.io InputStream]))
+            [clj-okhttp.links :as links]
+            [clj-okhttp.okhttp :as okhttp])
+  (:import [java.io InputStream]))
 
 
 (set! *warn-on-reflection* true)
-
-(defn wrap-to-and-from-data [handler]
-  (fn to-and-from-data-handler
-    ([request]
-     (let [req-obj (protos/transform Request request)
-           res-obj (handler req-obj)]
-       (with-meta
-         (protos/transform IPersistentMap res-obj)
-         {:request req-obj :response res-obj})))
-    ([request respond raise]
-     (let [req-obj (protos/transform Request request)]
-       (handler req-obj #(respond (with-meta
-                                    (protos/transform IPersistentMap %1)
-                                    {:request req-obj :response %})) raise)))))
-
 
 (defn wrap-lowercase-response-headers [handler]
   (letfn [(transform [response]
@@ -35,12 +18,10 @@
       ([request respond raise]
        (handler request (comp respond transform) raise)))))
 
-(def muuntaja-factory
-  (memoize (fn [opts] (m/create opts))))
 
 (defn wrap-init-muuntaja [handler]
   (letfn [(init-muuntaja [request]
-            (muuntaja-factory (or (:muuntaja request) mun/defaults)))]
+            (mun/muuntaja-factory (or (:muuntaja request) mun/defaults)))]
     (fn init-muuntaja-handler
       ([request]
        (handler (assoc request :muuntaja (init-muuntaja request))))
@@ -68,7 +49,7 @@
                     (raise e))))
               raise))))
 
-(defn wrap-encode-requests [handler]
+(defn wrap-okhttp-request-body [handler]
   (fn encode-request-handler
     ([request]
      (handler (mun/format-request request)))
@@ -78,25 +59,96 @@
        (catch Throwable e
          (raise e))))))
 
+(defn wrap-okhttp-request-url [handler]
+  (fn okhttp-request-url-handler
+    ([{:keys [query-params url] :as request}]
+     (handler (assoc request :url (okhttp/->url url query-params))))
+    ([{:keys [query-params url] :as request} respond raise]
+     (try (handler (assoc request :url (okhttp/->url url query-params)) respond raise)
+          (catch Throwable e (raise e))))))
+
+(defn wrap-okhttp-request-headers [handler]
+  (fn okhttp-request-headers-handler
+    ([{:keys [headers] :as request}]
+     (handler (assoc request :headers (okhttp/->headers headers))))
+    ([{:keys [headers] :as request} respond raise]
+     (try (handler (assoc request :headers (okhttp/->headers headers)) respond raise)
+          (catch Throwable e (raise e))))))
+
+(defn wrap-okhttp-response-headers [handler]
+  (fn okhttp-response-headers-handler
+    ([request]
+     (let [response (handler request)]
+       (update response :headers okhttp/<-headers)))
+    ([request respond raise]
+     (try (handler (okhttp/->request request)
+                   (fn [response]
+                     (respond (update response :headers okhttp/<-headers)))
+                   raise)
+          (catch Throwable e (raise e))))))
+
+(defn wrap-okhttp-response-body [handler]
+  (fn okhttp-response-body-handler
+    ([request]
+     (update (handler request) :body okhttp/<-response-body))
+    ([request respond raise]
+     (try (handler request
+                   (fn [response]
+                     (respond (update response :body okhttp/<-response-body)))
+                   raise)
+          (catch Throwable e (raise e))))))
+
+(defn wrap-okhttp-request-response [handler]
+  (fn okhttp-request-handler
+    ([request]
+     (let [final-request (okhttp/->request request)
+           response      (handler final-request)]
+       (with-meta (okhttp/<-response response)
+         {:request final-request :response response})))
+    ([request respond raise]
+     (try
+       (let [final-request (okhttp/->request request)]
+         (handler
+           (fn [response]
+             (respond
+               (with-meta
+                 (okhttp/<-response response)
+                 {:request final-request :response response})))
+           raise))
+       (catch Throwable e (raise e))))))
 
 (defn wrap-basic-authentication [handler]
   (fn basic-auth-handler
     ([request]
-     (handler request))
+     (if-some [[username password] (:basic-auth request)]
+       (let [value (utils/basic-auth username password)]
+         (-> request
+             (assoc-in [:headers "Authorization"] value)
+             (dissoc :basic-auth)
+             (handler)))
+       (handler request)))
     ([request respond raise]
-     (handler request respond raise))))
+     (if-some [[username password] (:basic-auth request)]
+       (try
+         (let [value (utils/basic-auth username password)]
+           (-> request
+               (assoc-in [:headers "Authorization"] value)
+               (dissoc :basic-auth)
+               (handler respond raise)))
+         (catch Throwable e (raise e)))
+       (handler request respond raise)))))
 
 (defn wrap-parse-link-headers [handler]
-  (fn parse-links-handler
-    ([request]
-     (handler request))
-    ([request respond raise]
-     (handler request respond raise))))
-
-(defn wrap-throw-exceptional-responses [handler]
-  (fn throw-exception-responses-handler
-    ([request]
-     (handler request))
-    ([request respond raise]
-     (handler request respond raise))))
+  (letfn [(extract-links [response]
+            (if-some [header (get-in response [:headers "link"])]
+              (links/read-link-headers header)
+              []))]
+    (fn parse-links-handler
+      ([request]
+       (let [response (handler request)]
+         (assoc response :links (extract-links response))))
+      ([request respond raise]
+       (letfn [(responder [response]
+                 (respond (assoc response :links (extract-links response))))]
+         (handler request responder raise))))))
 

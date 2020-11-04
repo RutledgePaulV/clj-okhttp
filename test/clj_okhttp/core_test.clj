@@ -3,8 +3,7 @@
             [clj-okhttp.core :refer :all]
             [muuntaja.core :as m]))
 
-(defonce client (create-client))
-
+(defonce test-client (create-client))
 
 
 (deftest format-request-and-response-test
@@ -15,7 +14,7 @@
            :muuntaja (assoc m/default-options :return :input-stream)
            :headers  {"content-type" "application/json"}}
           response
-          (patch client "https://postman-echo.com/patch" input-stream-body)]
+          (patch test-client "https://postman-echo.com/patch" input-stream-body)]
       (is (= 200 (:status response)))
       (is (= {:test "stuff"} (get-in response [:body :json])))))
 
@@ -25,7 +24,7 @@
            :muuntaja (assoc m/default-options :return :output-stream)
            :headers  {"content-type" "application/edn"}}
           response
-          (patch client "https://postman-echo.com/patch" output-stream-body)]
+          (patch test-client "https://postman-echo.com/patch" output-stream-body)]
       (is (= 200 (:status response)))
       (is (= (pr-str {:test "stuff"}) (get-in response [:body :data])))))
 
@@ -35,9 +34,17 @@
            :muuntaja (assoc m/default-options :return :bytes)
            :headers  {"content-type" "application/transit+json"}}
           response
-          (patch client "https://postman-echo.com/patch" bytes-body)]
+          (patch test-client "https://postman-echo.com/patch" bytes-body)]
       (is (= 200 (:status response)))
       (is (= ["^ " "~:test" "stuff"] (get-in response [:body :json]))))))
+
+
+(deftest basic-auth
+  (let [request  {:basic-auth ["user" "password"]}
+        response (get* test-client "https://httpbin.org/basic-auth/user/password" request)]
+    (is (= 200 (:status response)))
+    (is (= {:authenticated true :user "user"} (get response :body)))))
+
 
 (deftest websocket-test
   (let [upgrade-request
@@ -47,7 +54,7 @@
         message-promise
         (promise)
         socket
-        (connect client upgrade-request
+        (connect test-client upgrade-request
                  {:on-open (fn [socket response]
                              (deliver open-promise response))
                   :on-text (fn [socket message]
