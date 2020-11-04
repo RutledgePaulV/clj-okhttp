@@ -81,7 +81,7 @@
      (let [response (handler request)]
        (update response :headers okhttp/<-headers)))
     ([request respond raise]
-     (try (handler (okhttp/->request request)
+     (try (handler request
                    (fn [response]
                      (respond (update response :headers okhttp/<-headers)))
                    raise)
@@ -109,6 +109,7 @@
      (try
        (let [final-request (okhttp/->request request)]
          (handler
+           final-request
            (fn [response]
              (respond
                (with-meta

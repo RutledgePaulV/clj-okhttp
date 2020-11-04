@@ -1,7 +1,8 @@
 (ns clj-okhttp.core-test
   (:require [clojure.test :refer :all]
             [clj-okhttp.core :refer :all]
-            [muuntaja.core :as m]))
+            [muuntaja.core :as m])
+  (:import [okhttp3 Response]))
 
 (defonce test-client (create-client))
 
@@ -60,8 +61,8 @@
                   :on-text (fn [socket message]
                              (deliver message-promise message))})]
     (try
-      (let [response (deref open-promise)]
-        (is (= 101 (:status response)))
+      (let [response ^Response (deref open-promise)]
+        (is (= 101 (.code response)))
         (is (not (realized? message-promise))))
       (.send socket "This is a test.")
       (let [message (deref message-promise)]

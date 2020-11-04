@@ -40,7 +40,7 @@
             (assoc! agg (.name headers i) (.value headers i)))]
     (persistent! (reduce reduction (transient {}) (range (.size headers))))))
 
-(defn ->request ^Request [{:keys [request-method body headers url]}]
+(defn ->request ^Request [{:keys [request-method body headers url] :as req}]
   (.build
     (doto (Request$Builder.)
       (.method (strings/upper-case (name request-method)) body)
