@@ -1,12 +1,14 @@
 (ns clj-okhttp.okhttp
   (:require [clojure.string :as strings])
-  (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody]
+  (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder]
            [java.time Instant]
            [java.util Date]
            [java.io FilterInputStream InputStream]
-           [clojure.lang IPersistentMap]))
+           [clojure.lang IPersistentMap]
+           [java.util.concurrent TimeUnit]
+           [okhttp3.internal.io FileSystem]
+           [javax.net.ssl HostnameVerifier]))
 
-(set! *warn-on-reflection* true)
 
 (defn ->url ^HttpUrl [url query-params]
   (let [[^HttpUrl http-url segments]
@@ -61,3 +63,147 @@
   (let [stream (.byteStream body)]
     (proxy [FilterInputStream] [stream]
       (close [] (.close stream) (.close body)))))
+
+(defn ->dispatcher ^Dispatcher [dispatcher]
+  (cond
+    (instance? Dispatcher dispatcher)
+    dispatcher
+    (map? dispatcher)
+    (let [{:keys [max-requests max-requests-per-host executor-service]
+           :or   {max-requests 64 max-requests-per-host 5}} dispatcher]
+      (doto (Dispatcher. executor-service)
+        (.setMaxRequests max-requests)
+        (.setMaxRequestsPerHost max-requests-per-host)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->connection-pool ^ConnectionPool [connection-pool]
+  (cond
+    (or (nil? connection-pool) (instance? ConnectionPool connection-pool))
+    connection-pool
+    (map? connection-pool)
+    (let [{:keys [max-idle-connections keep-alive-duration time-unit]
+           :or   {max-idle-connections 5 keep-alive-duration 5 time-unit TimeUnit/MINUTES}} connection-pool]
+      (ConnectionPool. max-idle-connections keep-alive-duration time-unit))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->interceptor ^Interceptor [interceptor-or-fn]
+  (cond
+    (or (nil? interceptor-or-fn) (instance? Interceptor interceptor-or-fn))
+    interceptor-or-fn
+    (ifn? interceptor-or-fn)
+    (reify Interceptor (intercept [this chain] (interceptor-or-fn chain)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->event-listener-factory ^EventListener$Factory [factory]
+  (cond
+    (or (nil? factory) (instance? EventListener$Factory factory))
+    factory
+    (ifn? factory)
+    (reify EventListener$Factory (create [this call] (factory call)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->authenticator ^Authenticator [authenticator]
+  (cond
+    (or (nil? authenticator) (instance? Authenticator authenticator))
+    authenticator
+    (ifn? authenticator)
+    (reify Authenticator (authenticate [this route response] (authenticator route response)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->cache ^Cache [cache]
+  (cond
+    (or (nil? cache) (instance? Cache cache))
+    cache
+    (map? cache)
+    (let [{:keys [directory max-size file-system]
+           :or   {file-system FileSystem/SYSTEM}} cache]
+      (Cache. directory max-size file-system))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->connection-spec [connection-spec]
+  (cond
+    (or (nil? connection-spec) (instance? ConnectionSpec connection-spec))
+    connection-spec
+    (map? connection-spec)
+    (let [{:keys [is-tls
+                  supports-tls-extensions
+                  cipher-suites-as-string
+                  tls-versions-as-string]} connection-spec]
+      (ConnectionSpec. is-tls supports-tls-extensions cipher-suites-as-string tls-versions-as-string))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->protocol [protocol]
+  (cond
+    (or (nil? protocol) (instance? Protocol protocol))
+    protocol
+    (string? protocol)
+    (Protocol/get protocol)
+    (keyword? protocol)
+    (Protocol/get (name protocol))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->hostname-verifier [verifier]
+  (cond
+    (or (nil? verifier) (instance? HostnameVerifier verifier))
+    verifier
+    (ifn? verifier)
+    (reify HostnameVerifier (verify [this hostname session] (verifier hostname session)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->certificate-pinner [certificate-pinner]
+  (cond
+    (or (nil? certificate-pinner) (instance? CertificatePinner certificate-pinner))
+    certificate-pinner
+    (map? certificate-pinner)
+    (let [{:keys [pins]} certificate-pinner
+          builder (CertificatePinner$Builder.)]
+      (doseq [{:keys [pattern pin]} pins]
+        (.add builder pattern pin)))
+    :otherwise
+    (throw (IllegalArgumentException.))))
+
+(defn ->http-client ^OkHttpClient
+  [{:keys [dispatcher connection-pool interceptors network-interceptors event-listener-factory
+           retry-on-connection-failure authenticator follow-redirects follow-ssl-redirects cookie-jar
+           cache dns proxy proxy-selector proxy-authenticator socket-factory ssl-socket-factory
+           x509-trust-manager connection-specs protocols hostname-verifier certificate-pinner
+           call-timeout connect-timeout read-timeout write-timeout ping-interval
+           min-websocket-message-to-compress]}]
+  (cond-> (OkHttpClient$Builder.)
+    (some? dispatcher) (.dispatcher (->dispatcher dispatcher))
+    (some? connection-pool) (.connectionPool (->connection-pool connection-pool))
+    (not-empty interceptors) (as-> $ (doseq [i interceptors] (.addInterceptor $ (->interceptor i))) $)
+    (not-empty network-interceptors) (as-> $ (doseq [i interceptors] (.addNetworkInterceptor $ (->interceptor i))) $)
+    (some? event-listener-factory) (.eventListenerFactory (->event-listener-factory event-listener-factory))
+    (some? retry-on-connection-failure) (.retryOnConnectionFailure retry-on-connection-failure)
+    (some? authenticator) (.authenticator (->authenticator authenticator))
+    (some? follow-redirects) (.followRedirects follow-redirects)
+    (some? follow-ssl-redirects) (.followSslRedirects follow-ssl-redirects)
+    (some? cookie-jar) (.cookieJar cookie-jar)
+    (some? cache) (.cache (->cache cache))
+    (some? dns) (.dns dns)
+    (some? proxy) (.proxy proxy)
+    (some? proxy-selector) (.proxySelector proxy-selector)
+    (some? proxy-authenticator) (.proxyAuthenticator (->authenticator proxy-authenticator))
+    (some? socket-factory) (.socketFactory socket-factory)
+    (and (some? ssl-socket-factory) (some? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory x509-trust-manager)
+    (not-empty connection-specs) (.connectionSpecs (mapv ->connection-spec connection-specs))
+    (not-empty protocols) (.protocols (mapv ->protocol protocols))
+    (some? hostname-verifier) (.hostnameVerifier (->hostname-verifier hostname-verifier))
+    (some? certificate-pinner) (.certificatePinner (->certificate-pinner certificate-pinner))
+    (some? call-timeout) (.callTimeout 0 TimeUnit/MILLISECONDS)
+    (some? connect-timeout) (.connectTimeout connect-timeout TimeUnit/MILLISECONDS)
+    (some? read-timeout) (.readTimeout read-timeout TimeUnit/MILLISECONDS)
+    (some? write-timeout) (.writeTimeout write-timeout TimeUnit/MILLISECONDS)
+    (some? ping-interval) (.pingInterval ping-interval TimeUnit/MILLISECONDS)
+    (some? min-websocket-message-to-compress) (.minWebSocketMessageToCompress min-websocket-message-to-compress)
+    :always (.build)))

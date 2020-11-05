@@ -1,5 +1,6 @@
 (ns clj-okhttp.core
-  (:require [clj-okhttp.middleware :as mw])
+  (:require [clj-okhttp.middleware :as mw]
+            [clj-okhttp.okhttp :as okhttp])
   (:import [okhttp3 Request OkHttpClient Callback WebSocketListener WebSocket Call]
            [clojure.lang IFn]
            [java.util Map]))
@@ -8,6 +9,7 @@
 
 (def default-middleware
   [mw/wrap-init-muuntaja
+   mw/wrap-lowercase-request-headers
    mw/wrap-basic-authentication
    mw/wrap-parse-link-headers
    mw/wrap-decode-responses
@@ -20,12 +22,25 @@
    mw/wrap-okhttp-request-response])
 
 (defn create-client
+  "Creates a OkHttpClient instance with the specified options. For the most
+   part you can express the options as clojure data. Note that you probably
+   should not be using OkHttp interceptors and instead should provide
+   your own ring-style middleware when making requests (so you can act on map
+   representations instead of OkHttp objects)."
   (^OkHttpClient []
-   (create-client {}))
-  (^OkHttpClient [{:keys [] :as opts}]
-   (OkHttpClient.)))
+   (okhttp/->http-client {}))
+  (^OkHttpClient [opts]
+   (okhttp/->http-client opts)))
 
 (defn request*
+  "Executes a http request. Requests consist of clojure data in the same style
+   as other http client libraries like okhttp.
+
+   The 2 arity invokes a synchronous request and returns a response map.
+
+   The 4 arity invokes an asynchronous request and returns a OkHttp3.Call instance
+   that can be used to cancel / abort the request as long as it's still in flight.
+  "
   (^Map [^OkHttpClient client request]
    (let [handler    #(.execute (.newCall client ^Request %1))
          handler+mw (->> (rseq (or (not-empty (:middleware request)) default-middleware))
@@ -45,6 +60,7 @@
      (handler+mw request respond raise))))
 
 (defn get*
+  "Executes a http get request."
   (^Map [^OkHttpClient client url]
    (request* client {:request-method :get :url url}))
   (^Map [^OkHttpClient client url request]
@@ -53,6 +69,7 @@
    (request* client (assoc request :request-method :get :url url) respond raise)))
 
 (defn head
+  "Executes a http head request."
   (^Map [^OkHttpClient client url]
    (request* client {:request-method :head :url url}))
   (^Map [^OkHttpClient client url request]
@@ -61,6 +78,7 @@
    (request* client (assoc request :request-method :head :url url) respond raise)))
 
 (defn options
+  "Executes a http options request."
   (^Map [^OkHttpClient client url]
    (request* client {:request-method :options :url url}))
   (^Map [^OkHttpClient client url request]
@@ -69,24 +87,28 @@
    (request* client (assoc request :request-method :options :url url) respond raise)))
 
 (defn put
+  "Executes a http put request."
   (^Map [^OkHttpClient client url request]
    (request* client (assoc request :request-method :put :url url)))
   (^Call [^OkHttpClient client url request respond raise]
    (request* client (assoc request :request-method :put :url url) respond raise)))
 
 (defn patch
+  "Executes a http patch request."
   (^Map [^OkHttpClient client url request]
    (request* client (assoc request :request-method :patch :url url)))
   (^Call [^OkHttpClient client url request respond raise]
    (request* client (assoc request :request-method :patch :url url) respond raise)))
 
 (defn post
+  "Executes a http post request."
   (^Map [^OkHttpClient client url request]
    (request* client (assoc request :request-method :post :url url)))
   (^Call [^OkHttpClient client url request respond raise]
    (request* client (assoc request :request-method :post :url url) respond raise)))
 
 (defn delete
+  "Executes a http delete request."
   (^Map [^OkHttpClient client url]
    (request* client {:request-method :delete :url url}))
   (^Map [^OkHttpClient client url request]
@@ -95,47 +117,59 @@
    (request* client (assoc request :request-method :delete :url url) respond raise)))
 
 (defn connect
-  ^WebSocket [^OkHttpClient client request
-              {:keys [on-open on-bytes on-text on-closing on-closed on-failure]
-               :or   {on-open    (fn default-on-open [socket response])
-                      on-bytes   (fn default-on-bytes [socket message])
-                      on-text    (fn default-on-text [socket message])
-                      on-closing (fn default-on-closing [socket code reason])
-                      on-closed  (fn default-on-closed [socket code reason])
-                      on-failure (fn default-on-failure [socket exception response])}}]
-  (let [handler     (fn upgrade-request-handler [request respond raise]
-                      (let [listener
-                            (proxy [WebSocketListener] []
-                              (onOpen [socket response]
-                                (on-open socket response)
-                                (respond response))
-                              (onMessage [socket message]
-                                (if (string? message)
-                                  (on-text socket message)
-                                  (on-bytes socket message)))
-                              (onClosing [socket code reason]
-                                (on-closing socket code reason))
-                              (onClosed [socket code reason]
-                                (on-closed socket code reason))
-                              (onFailure [socket throwable response]
-                                (on-failure socket throwable response)
-                                (raise throwable)))]
-                        (.newWebSocket client request listener)))
-        handler+mw  (->> (rseq (or (not-empty (:middleware request))
-                                   default-middleware))
-                         (reduce #(%2 %1) handler))
-        upgrade-req (-> request
-                        (assoc :as :stream)
-                        (update :request-method #(or % :get))
-                        (assoc-in [:headers "upgrade"] "websocket"))
-        outcome     (promise)
-        socket      (handler+mw
-                      upgrade-req
-                      (fn [response]
-                        (deliver outcome response))
-                      (fn [exception]
-                        (deliver outcome exception)))]
-    (let [result (deref outcome)]
-      (if (instance? Exception result)
-        (throw result)
-        socket))))
+  "Opens a websocket connection using the provided http upgrade request.
+   Registers callbacks for the various events in a websocket lifecycle.
+
+   ring-style middleware are used to transform the upgrade request in the
+   same way that they are used elsewhere for a http request. no middleware
+   is applied per-message on the socket and messages are delivered to user
+   callbacks in raw string/byte form.
+
+   Returns an OkHttp3.Websocket instance that can be used to send messages
+   on the open socket. Callbacks also receive this same instance so they can
+   easily send replies to the other end of the socket.
+   "
+  (^WebSocket [^OkHttpClient client request
+               {:keys [on-open on-bytes on-text on-closing on-closed on-failure]
+                :or   {on-open    (fn default-on-open [socket response])
+                       on-bytes   (fn default-on-bytes [socket message])
+                       on-text    (fn default-on-text [socket message])
+                       on-closing (fn default-on-closing [socket code reason])
+                       on-closed  (fn default-on-closed [socket code reason])
+                       on-failure (fn default-on-failure [socket exception response])}}]
+   (let [handler     (fn upgrade-request-handler [request respond raise]
+                       (let [listener
+                             (proxy [WebSocketListener] []
+                               (onOpen [socket response]
+                                 (on-open socket response)
+                                 (respond response))
+                               (onMessage [socket message]
+                                 (if (string? message)
+                                   (on-text socket message)
+                                   (on-bytes socket message)))
+                               (onClosing [socket code reason]
+                                 (on-closing socket code reason))
+                               (onClosed [socket code reason]
+                                 (on-closed socket code reason))
+                               (onFailure [socket throwable response]
+                                 (on-failure socket throwable response)
+                                 (raise throwable)))]
+                         (.newWebSocket client request listener)))
+         handler+mw  (->> (rseq (or (not-empty (:middleware request))
+                                    default-middleware))
+                          (reduce #(%2 %1) handler))
+         upgrade-req (-> request
+                         (assoc :as :stream)
+                         (update :request-method #(or % :get))
+                         (assoc-in [:headers "upgrade"] "websocket"))
+         outcome     (promise)
+         socket      (handler+mw
+                       upgrade-req
+                       (fn [response]
+                         (deliver outcome response))
+                       (fn [exception]
+                         (deliver outcome exception)))]
+     (let [result (deref outcome)]
+       (if (instance? Exception result)
+         (throw result)
+         socket)))))

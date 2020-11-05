@@ -9,24 +9,52 @@
 
 (set! *warn-on-reflection* true)
 
-(defn wrap-lowercase-response-headers [handler]
-  (letfn [(transform [response]
-            (update response :headers #(utils/map-keys strings/lower-case %)))]
-    (fn lowercase-headers-handler
-      ([request]
-       (transform (handler request)))
-      ([request respond raise]
-       (handler request (comp respond transform) raise)))))
+(defn request-transformer [handler f]
+  (fn ([request] (handler (f request)))
+    ([request respond raise]
+     (try (handler (f request) respond raise)
+          (catch Throwable e (raise e))))))
 
+(defn response-transformer [handler f]
+  (fn ([request] (f (handler request)))
+    ([request respond raise]
+     (try (handler request (comp respond f) raise)
+          (catch Throwable e (raise e))))))
+
+(defn wrap-lowercase-request-headers [handler]
+  (letfn [(lowercase-request-headers [response]
+            (update response :headers #(utils/map-keys (comp strings/lower-case name) %)))]
+    (request-transformer handler lowercase-request-headers)))
+
+(defn wrap-lowercase-response-headers [handler]
+  (letfn [(lowercase-response-headers [response]
+            (update response :headers #(utils/map-keys (comp strings/lower-case name) %)))]
+    (response-transformer handler lowercase-response-headers)))
+
+(defn wrap-basic-authentication [handler]
+  (letfn [(basic-authentication-header [request]
+            (if-some [[username password] (:basic-auth request)]
+              (let [value (utils/basic-auth username password)]
+                (-> request
+                    (assoc-in [:headers "authorization"] value)
+                    (dissoc :basic-auth)))
+              request))]
+    (request-transformer handler basic-authentication-header)))
+
+(defn wrap-parse-link-headers [handler]
+  (letfn [(parse-link-headers [response]
+            (let [links
+                  (if-some [header (get-in response [:headers "link"])]
+                    (links/read-link-headers header)
+                    {})]
+              (assoc response :links links)))]
+    (response-transformer handler parse-link-headers)))
 
 (defn wrap-init-muuntaja [handler]
   (letfn [(init-muuntaja [request]
-            (mun/muuntaja-factory (or (:muuntaja request) mun/defaults)))]
-    (fn init-muuntaja-handler
-      ([request]
-       (handler (assoc request :muuntaja (init-muuntaja request))))
-      ([request respond raise]
-       (handler (assoc request :muuntaja (init-muuntaja request)) respond raise)))))
+            (let [opts (or (:muuntaja request) mun/defaults)]
+              (assoc request :muuntaja (mun/muuntaja-factory opts))))]
+    (request-transformer handler init-muuntaja)))
 
 (defn wrap-decode-responses [handler]
   (fn decode-response-handler
@@ -50,53 +78,27 @@
               raise))))
 
 (defn wrap-okhttp-request-body [handler]
-  (fn encode-request-handler
-    ([request]
-     (handler (mun/format-request request)))
-    ([request respond raise]
-     (try
-       (handler (mun/format-request request) respond raise)
-       (catch Throwable e
-         (raise e))))))
+  (request-transformer handler mun/format-request))
 
 (defn wrap-okhttp-request-url [handler]
-  (fn okhttp-request-url-handler
-    ([{:keys [query-params url] :as request}]
-     (handler (assoc request :url (okhttp/->url url query-params))))
-    ([{:keys [query-params url] :as request} respond raise]
-     (try (handler (assoc request :url (okhttp/->url url query-params)) respond raise)
-          (catch Throwable e (raise e))))))
+  (letfn [(transformer [{:keys [url query-params] :as request}]
+            (assoc request :url (okhttp/->url url query-params)))]
+    (request-transformer handler transformer)))
 
 (defn wrap-okhttp-request-headers [handler]
-  (fn okhttp-request-headers-handler
-    ([{:keys [headers] :as request}]
-     (handler (assoc request :headers (okhttp/->headers headers))))
-    ([{:keys [headers] :as request} respond raise]
-     (try (handler (assoc request :headers (okhttp/->headers headers)) respond raise)
-          (catch Throwable e (raise e))))))
+  (letfn [(okhttp-request-headers [request]
+            (update request :headers okhttp/->headers))]
+    (request-transformer handler okhttp-request-headers)))
 
 (defn wrap-okhttp-response-headers [handler]
-  (fn okhttp-response-headers-handler
-    ([request]
-     (let [response (handler request)]
-       (update response :headers okhttp/<-headers)))
-    ([request respond raise]
-     (try (handler request
-                   (fn [response]
-                     (respond (update response :headers okhttp/<-headers)))
-                   raise)
-          (catch Throwable e (raise e))))))
+  (letfn [(okhttp-response-headers [response]
+            (update response :headers okhttp/<-headers))]
+    (response-transformer handler okhttp-response-headers)))
 
 (defn wrap-okhttp-response-body [handler]
-  (fn okhttp-response-body-handler
-    ([request]
-     (update (handler request) :body okhttp/<-response-body))
-    ([request respond raise]
-     (try (handler request
-                   (fn [response]
-                     (respond (update response :body okhttp/<-response-body)))
-                   raise)
-          (catch Throwable e (raise e))))))
+  (letfn [(okhttp-response-body [response]
+            (update response :body okhttp/<-response-body))]
+    (response-transformer handler okhttp-response-body)))
 
 (defn wrap-okhttp-request-response [handler]
   (fn okhttp-request-handler
@@ -118,38 +120,4 @@
            raise))
        (catch Throwable e (raise e))))))
 
-(defn wrap-basic-authentication [handler]
-  (fn basic-auth-handler
-    ([request]
-     (if-some [[username password] (:basic-auth request)]
-       (let [value (utils/basic-auth username password)]
-         (-> request
-             (assoc-in [:headers "Authorization"] value)
-             (dissoc :basic-auth)
-             (handler)))
-       (handler request)))
-    ([request respond raise]
-     (if-some [[username password] (:basic-auth request)]
-       (try
-         (let [value (utils/basic-auth username password)]
-           (-> request
-               (assoc-in [:headers "Authorization"] value)
-               (dissoc :basic-auth)
-               (handler respond raise)))
-         (catch Throwable e (raise e)))
-       (handler request respond raise)))))
-
-(defn wrap-parse-link-headers [handler]
-  (letfn [(extract-links [response]
-            (if-some [header (get-in response [:headers "link"])]
-              (links/read-link-headers header)
-              []))]
-    (fn parse-links-handler
-      ([request]
-       (let [response (handler request)]
-         (assoc response :links (extract-links response))))
-      ([request respond raise]
-       (letfn [(responder [response]
-                 (respond (assoc response :links (extract-links response))))]
-         (handler request responder raise))))))
 
