@@ -8,6 +8,12 @@
 (set! *warn-on-reflection* true)
 
 (def default-middleware
+  "The standard set of middleware used by this library to transform
+   from a ring style request map -> OkHttp.Request -> OkHttp.Response
+   -> ring style response map. Along the way this middleware takes care
+   of request encoding and response decoding. If you choose to pass custom
+   middleware into a request function you probably still want to include most
+   if not all of these (order matters!)"
   [mw/wrap-init-muuntaja
    mw/wrap-lowercase-request-headers
    mw/wrap-basic-authentication
@@ -22,13 +28,13 @@
    mw/wrap-okhttp-request-response])
 
 (defn create-client
-  "Creates a OkHttpClient instance with the specified options. For the most
-   part you can express the options as clojure data. Note that you probably
-   should not be using OkHttp interceptors and instead should provide
-   your own ring-style middleware when making requests (so you can act on map
-   representations instead of OkHttp objects)."
+  "Creates a OkHttpClient instance with the specified options. Simple options can be
+   expressed with clojure data but you may need to construct OkHttp object instances
+   for the larger http client plugins. Note that you probably should not be using
+   OkHttp interceptors and instead should provide your own ring-style middleware
+   when making requests (so you can act on data representations instead of objects)."
   (^OkHttpClient []
-   (okhttp/->http-client {}))
+   (create-client {}))
   (^OkHttpClient [opts]
    (okhttp/->http-client opts)))
 
@@ -173,3 +179,51 @@
        (if (instance? Exception result)
          (throw result)
          socket)))))
+
+
+(defn success? [{:keys [status]}]
+  (<= 200 status 299))
+
+(defn redirect? [{:keys [status]}]
+  (<= 300 status 399))
+
+(defn client-error? [{:keys [status]}]
+  (<= 400 status 499))
+
+(defn server-error? [{:keys [status]}]
+  (<= 500 status 599))
+
+(defn bad-request? [{:keys [status]}]
+  (== 400 status))
+
+(defn unauthorized? [{:keys [status]}]
+  (== 401 status))
+
+(defn forbidden? [{:keys [status]}]
+  (== 403 status))
+
+(defn not-found? [{:keys [status]}]
+  (== 404 status))
+
+(defn conflict? [{:keys [status]}]
+  (== 409 status))
+
+(defmacro case-status [status & range+clause]
+  `(condp (fn [bounds# status#]
+            (cond
+              (number? bounds#)
+              (= bounds# status#)
+              (and (vector? bounds#) (= 1 (count bounds#)))
+              (= (first bounds#) status#)
+              (vector? bounds#)
+              (<= (first bounds#) status# (second bounds#))
+              (set? bounds#)
+              (contains? bounds# status#)
+              (list? bounds#)
+              (contains? (set bounds#) status#)))
+          ~status
+     ~@range+clause))
+
+(defmacro caselet-response [binding & range+clause]
+  `(let [response# ~(second binding) ~(first binding) response#]
+     (case-status (get response# :status) ~@range+clause)))

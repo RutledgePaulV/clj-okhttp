@@ -1,10 +1,9 @@
 (ns clj-okhttp.middleware
   (:require [clj-okhttp.utilities :as utils]
             [clojure.string :as strings]
-            [clj-okhttp.muuntaja :as mun]
+            [clj-okhttp.formats :as mun]
             [clj-okhttp.links :as links]
-            [clj-okhttp.okhttp :as okhttp])
-  (:import [java.io InputStream]))
+            [clj-okhttp.okhttp :as okhttp]))
 
 
 (set! *warn-on-reflection* true)
@@ -61,8 +60,7 @@
     ([request]
      (let [response (handler request)]
        (if (not= (:as request) :stream)
-         (with-open [_ ^InputStream (:body response)]
-           (mun/format-response request response))
+         (mun/format-response request response)
          response)))
     ([request respond raise]
      (handler request
@@ -70,8 +68,7 @@
                 (try
                   (respond
                     (if (not= (:as request) :stream)
-                      (with-open [_ ^InputStream (:body response)]
-                        (mun/format-response request response))
+                      (mun/format-response request response)
                       response))
                   (catch Throwable e
                     (raise e))))
@@ -82,7 +79,9 @@
 
 (defn wrap-okhttp-request-url [handler]
   (letfn [(transformer [{:keys [url query-params] :as request}]
-            (assoc request :url (okhttp/->url url query-params)))]
+            (-> request
+                (assoc :url (okhttp/->url url query-params))
+                (dissoc :query-params)))]
     (request-transformer handler transformer)))
 
 (defn wrap-okhttp-request-headers [handler]

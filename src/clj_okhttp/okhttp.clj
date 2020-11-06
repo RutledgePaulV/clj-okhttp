@@ -1,13 +1,16 @@
 (ns clj-okhttp.okhttp
-  (:require [clojure.string :as strings])
-  (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder]
+  (:require [clojure.string :as strings]
+            [clojure.java.io :as io])
+  (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder FormBody FormBody$Builder MultipartBody MultipartBody$Builder RequestBody MediaType]
            [java.time Instant]
            [java.util Date]
-           [java.io FilterInputStream InputStream]
-           [clojure.lang IPersistentMap]
+           [java.io FilterInputStream InputStream File]
+           [clojure.lang IPersistentMap MultiFn]
            [java.util.concurrent TimeUnit]
            [okhttp3.internal.io FileSystem]
-           [javax.net.ssl HostnameVerifier]))
+           [javax.net.ssl HostnameVerifier]
+           [okio BufferedSink]
+           [muuntaja.protocols StreamableResponse]))
 
 
 (defn ->url ^HttpUrl [url query-params]
@@ -50,7 +53,7 @@
       (.headers headers)
       (.url ^HttpUrl url))))
 
-(defn <-response [^Response response]
+(defn <-response ^IPersistentMap [^Response response]
   {:status    (.code response)
    :headers   (.headers response)
    :body      (.body response)
@@ -126,7 +129,7 @@
     :otherwise
     (throw (IllegalArgumentException.))))
 
-(defn ->connection-spec [connection-spec]
+(defn ->connection-spec ^ConnectionSpec [connection-spec]
   (cond
     (or (nil? connection-spec) (instance? ConnectionSpec connection-spec))
     connection-spec
@@ -139,7 +142,7 @@
     :otherwise
     (throw (IllegalArgumentException.))))
 
-(defn ->protocol [protocol]
+(defn ->protocol ^Protocol [protocol]
   (cond
     (or (nil? protocol) (instance? Protocol protocol))
     protocol
@@ -150,7 +153,7 @@
     :otherwise
     (throw (IllegalArgumentException.))))
 
-(defn ->hostname-verifier [verifier]
+(defn ->hostname-verifier ^HostnameVerifier [verifier]
   (cond
     (or (nil? verifier) (instance? HostnameVerifier verifier))
     verifier
@@ -159,7 +162,7 @@
     :otherwise
     (throw (IllegalArgumentException.))))
 
-(defn ->certificate-pinner [certificate-pinner]
+(defn ->certificate-pinner ^CertificatePinner [certificate-pinner]
   (cond
     (or (nil? certificate-pinner) (instance? CertificatePinner certificate-pinner))
     certificate-pinner
@@ -170,6 +173,70 @@
         (.add builder pattern pin)))
     :otherwise
     (throw (IllegalArgumentException.))))
+
+
+(declare ->request-body)
+
+
+(defn ->multipart-body ^MultipartBody [parts]
+  (let [builder (doto (MultipartBody$Builder.)
+                  (.setType (MediaType/parse
+                              (or (some-> parts meta :mime-type)
+                                  "multipart/form-data"))))]
+    (doseq [{:keys [name content part-name mime-type]} parts]
+      (.addFormDataPart builder (or part-name name) name (->request-body mime-type content)))
+    (.build builder)))
+
+(defn ->form-body ^FormBody [body]
+  (let [builder (FormBody$Builder.)]
+    (doseq [[k v] body]
+      (.add builder (name k) (if (keyword? v) (name v) (str v))))
+    (.build builder)))
+
+(defn ->request-body ^RequestBody [content-type content]
+  (let [media (MediaType/parse (or content-type "application/octet-stream"))]
+    (cond
+      (nil? content) nil
+
+      (instance? RequestBody content)
+      content
+
+      (and (= "application/x-www-form-urlencoded" content-type) (map? content))
+      (->form-body content)
+
+      (and (= "multipart/form-data" content-type) (vector? content))
+      (->multipart-body content)
+
+      (or (instance? StreamableResponse content)
+          (fn? content)
+          (instance? MultiFn content))
+      (proxy [RequestBody] []
+        (contentLength [] -1)
+        (contentType [] media)
+        (writeTo [^BufferedSink sink]
+          (content (.outputStream sink)))
+        (isOneShot [] true))
+
+      (instance? InputStream content)
+      (proxy [RequestBody] []
+        (contentLength [] -1)
+        (contentType [] media)
+        (writeTo [^BufferedSink sink]
+          (with-open [in content]
+            (io/copy in (.outputStream sink))))
+        (isOneShot [] true))
+
+      (string? content)
+      (RequestBody/create ^String content media)
+
+      (bytes? content)
+      (RequestBody/create ^bytes content media)
+
+      (instance? File content)
+      (RequestBody/create ^File content media)
+
+      :otherwise
+      nil)))
 
 (defn ->http-client ^OkHttpClient
   [{:keys [dispatcher connection-pool interceptors network-interceptors event-listener-factory

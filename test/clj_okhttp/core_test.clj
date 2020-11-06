@@ -15,7 +15,7 @@
            :muuntaja (assoc m/default-options :return :input-stream)
            :headers  {"content-type" "application/json"}}
           response
-          (patch test-client "https://postman-echo.com/patch" input-stream-body)]
+          (patch test-client "https://httpbin.org/patch" input-stream-body)]
       (is (= 200 (:status response)))
       (is (= {:test "stuff"} (get-in response [:body :json])))))
 
@@ -25,7 +25,7 @@
            :muuntaja (assoc m/default-options :return :output-stream)
            :headers  {"content-type" "application/edn"}}
           response
-          (patch test-client "https://postman-echo.com/patch" output-stream-body)]
+          (patch test-client "https://httpbin.org/patch" output-stream-body)]
       (is (= 200 (:status response)))
       (is (= (pr-str {:test "stuff"}) (get-in response [:body :data])))))
 
@@ -35,7 +35,7 @@
            :muuntaja (assoc m/default-options :return :bytes)
            :headers  {"content-type" "application/transit+json"}}
           response
-          (patch test-client "https://postman-echo.com/patch" bytes-body)]
+          (patch test-client "https://httpbin.org/patch" bytes-body)]
       (is (= 200 (:status response)))
       (is (= ["^ " "~:test" "stuff"] (get-in response [:body :json]))))))
 
