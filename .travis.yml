@@ -1,0 +1,8 @@
+language: clojure
+lein: 2.9.3
+matrix:
+  include:
+    - jdk: openjdk13
+after_success:
+  - lein cloverage --codecov
+  - bash <(curl -s https://codecov.io/bash) -f target/coverage/codecov.json
