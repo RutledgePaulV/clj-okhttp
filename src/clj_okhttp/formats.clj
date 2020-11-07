@@ -13,16 +13,22 @@
         (negotiate muuntaja content-type)))))
 
 (defn get-intended-content-type [{:keys [multipart form-params] :as request}]
-  (or (get-in request [:headers "content-type"])
-      (when (some? form-params) "application/x-www-form-urlencoded")
-      (when (some? multipart) "multipart/form-data")
-      "application/octet-stream"))
+  (let [headers (get-in request [:headers])]
+    (if-some [header (find headers "content-type")]
+      (val header)
+      (or
+        (when (some? form-params) "application/x-www-form-urlencoded")
+        (when (some? multipart) "multipart/form-data")
+        "application/octet-stream"))))
 
 (defn format-request [{:keys [muuntaja multipart form-params body] :as request}]
   (let [content-type (get-intended-content-type request)
-        request-body (or (okhttp/->request-body content-type multipart)
-                         (okhttp/->request-body content-type form-params)
-                         (okhttp/->request-body content-type body)
+        request-body (or (when (some? multipart)
+                           (okhttp/->request-body content-type multipart))
+                         (when (some? form-params)
+                           (okhttp/->request-body content-type form-params))
+                         (when (some? body)
+                           (okhttp/->request-body content-type body))
                          (when (some? body)
                            (let [negotiated
                                  ^FormatAndCharset
@@ -30,9 +36,9 @@
                              (if-some [encoder (m/encoder muuntaja (.-format negotiated))]
                                (okhttp/->request-body content-type (encoder body (.-charset negotiated)))
                                (throw (ex-info (str "No muuntaja encoder defined for " content-type) {}))))))]
-    (-> request
-        (assoc :body request-body)
-        (assoc-in [:headers "content-type"] content-type))))
+    (cond-> request
+      (some? request-body) (assoc :body request-body)
+      (some? content-type) (assoc-in [:headers "content-type"] content-type))))
 
 (defn format-response [{:keys [muuntaja] :as request} {:keys [body] :as response}]
   (let [response-content-type (get-in response [:headers "content-type"])

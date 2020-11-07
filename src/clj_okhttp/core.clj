@@ -1,6 +1,7 @@
 (ns clj-okhttp.core
   (:require [clj-okhttp.middleware :as mw]
             [clj-okhttp.okhttp :as okhttp])
+  (:refer-clojure :exclude [get])
   (:import [okhttp3 Request OkHttpClient Callback WebSocketListener WebSocket Call]
            [clojure.lang IFn]
            [java.util Map]))
@@ -21,6 +22,7 @@
    mw/wrap-decode-responses
    mw/wrap-lowercase-response-headers
    mw/wrap-okhttp-request-url
+   mw/wrap-origin-header-if-websocket
    mw/wrap-okhttp-request-body
    mw/wrap-okhttp-request-headers
    mw/wrap-okhttp-response-body
@@ -65,7 +67,7 @@
                          (reduce #(%2 %1) handler))]
      (handler+mw request respond raise))))
 
-(defn get*
+(defn get
   "Executes a http get request."
   (^Map [^OkHttpClient client url]
    (request* client {:request-method :get :url url}))
@@ -226,4 +228,4 @@
 
 (defmacro caselet-response [binding & range+clause]
   `(let [response# ~(second binding) ~(first binding) response#]
-     (case-status (get response# :status) ~@range+clause)))
+     (case-status (:status response#) ~@range+clause)))

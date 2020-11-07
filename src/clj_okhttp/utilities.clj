@@ -1,5 +1,6 @@
 (ns clj-okhttp.utilities
-  (:import [java.util Base64]))
+  (:import [java.util Base64]
+           [okhttp3 HttpUrl]))
 
 (set! *warn-on-reflection* true)
 
@@ -17,3 +18,10 @@
           (Base64/getEncoder)
           (.getBytes (str username ":" password)))]
     (str "Basic " (String. bites "UTF-8"))))
+
+(defn url->origin [^HttpUrl url]
+  (if
+    (or (and (= (.scheme url) "https") (== (.port url) 443))
+        (and (= (.scheme url) "http") (== (.port url) 80)))
+    (format "%s://%s" (.scheme url) (.host url))
+    (format "%s://%s:%d" (.scheme url) (.host url) (.port url))))

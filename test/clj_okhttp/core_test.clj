@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [clj-okhttp.core :refer :all]
             [muuntaja.core :as m])
+  (:refer-clojure :exclude [get])
   (:import [okhttp3 Response]))
 
 (defonce test-client (create-client))
@@ -42,9 +43,9 @@
 
 (deftest basic-auth
   (let [request  {:basic-auth ["user" "password"]}
-        response (get* test-client "https://httpbin.org/basic-auth/user/password" request)]
+        response (get test-client "https://httpbin.org/basic-auth/user/password" request)]
     (is (= 200 (:status response)))
-    (is (= {:authenticated true :user "user"} (get response :body)))))
+    (is (= {:authenticated true :user "user"} (:body response)))))
 
 
 (deftest websocket-test

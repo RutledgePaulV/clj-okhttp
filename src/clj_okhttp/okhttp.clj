@@ -21,7 +21,9 @@
           [(HttpUrl/parse url) []]
           (vector? url)
           (let [[begin & parts] (flatten url)]
-            [(HttpUrl/parse begin) parts]))]
+            [(HttpUrl/parse begin) parts])
+          (instance? HttpUrl url)
+          [url []])]
     (if (or (not-empty segments) (not-empty query-params))
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]

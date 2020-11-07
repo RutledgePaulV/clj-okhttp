@@ -77,6 +77,16 @@
 (defn wrap-okhttp-request-body [handler]
   (request-transformer handler mun/format-request))
 
+(defn wrap-origin-header-if-websocket [handler]
+  (letfn [(transformer [{:keys [url query-params headers] :as req}]
+            (if (and (= "websocket" (get-in headers ["upgrade"]))
+                     (nil? (get-in req [:headers "origin"])))
+              (->> (okhttp/->url url query-params)
+                   (utils/url->origin)
+                   (assoc-in req [:headers "origin"]))
+              req))]
+    (request-transformer handler transformer)))
+
 (defn wrap-okhttp-request-url [handler]
   (letfn [(transformer [{:keys [url query-params] :as request}]
             (-> request
