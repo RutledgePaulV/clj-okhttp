@@ -8,26 +8,6 @@
 
 (set! *warn-on-reflection* true)
 
-(def default-middleware
-  "The standard set of middleware used by this library to transform
-   from a ring style request map -> OkHttp.Request -> OkHttp.Response
-   -> ring style response map. Along the way this middleware takes care
-   of request encoding and response decoding. If you choose to pass custom
-   middleware into a request function you probably still want to include most
-   if not all of these (order matters!)"
-  [mw/wrap-init-muuntaja
-   mw/wrap-lowercase-request-headers
-   mw/wrap-basic-authentication
-   mw/wrap-parse-link-headers
-   mw/wrap-decode-responses
-   mw/wrap-lowercase-response-headers
-   mw/wrap-okhttp-request-url
-   mw/wrap-origin-header-if-websocket
-   mw/wrap-okhttp-request-body
-   mw/wrap-okhttp-request-headers
-   mw/wrap-okhttp-response-body
-   mw/wrap-okhttp-response-headers
-   mw/wrap-okhttp-request-response])
 
 (defn create-client
   "Creates a OkHttpClient instance with the specified options. Simple options can be
@@ -38,7 +18,8 @@
   (^OkHttpClient []
    (create-client {}))
   (^OkHttpClient [opts]
-   (okhttp/->http-client opts)))
+   (doto (okhttp/->http-client opts)
+     (mw/per-client-middleware (:middleware opts [])))))
 
 (defn request*
   "Executes a http request. Requests consist of clojure data in the same style
@@ -51,8 +32,7 @@
   "
   (^Map [^OkHttpClient client request]
    (let [handler    #(.execute (.newCall client ^Request %1))
-         handler+mw (->> (rseq (or (not-empty (:middleware request)) default-middleware))
-                         (reduce #(%2 %1) handler))]
+         handler+mw (mw/compile-middleware client handler request)]
      (handler+mw request)))
   (^Call [^OkHttpClient client request respond raise]
    (let [handler    #(let [call     (.newCall client ^Request %1)
@@ -63,8 +43,7 @@
                                         (^IFn %2 response)))]
                        (.enqueue call callback)
                        call)
-         handler+mw (->> (rseq (or (not-empty (:middleware request)) default-middleware))
-                         (reduce #(%2 %1) handler))]
+         handler+mw (mw/compile-middleware client handler request)]
      (handler+mw request respond raise))))
 
 (defn get
@@ -163,9 +142,7 @@
                                  (on-failure socket throwable response)
                                  (raise throwable)))]
                          (.newWebSocket client request listener)))
-         handler+mw  (->> (rseq (or (not-empty (:middleware request))
-                                    default-middleware))
-                          (reduce #(%2 %1) handler))
+         handler+mw  (mw/compile-middleware client handler request)
          upgrade-req (-> request
                          (assoc :as :stream)
                          (update :request-method #(or % :get))

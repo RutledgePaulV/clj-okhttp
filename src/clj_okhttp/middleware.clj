@@ -129,4 +129,45 @@
            raise))
        (catch Throwable e (raise e))))))
 
+(def default-middleware
+  "The standard set of middleware used by this library to transform
+   from a ring style request map -> OkHttp.Request -> OkHttp.Response
+   -> ring style response map. Along the way this middleware takes care
+   of request encoding and response decoding. If you choose to pass custom
+   middleware into a request function you probably still want to include most
+   if not all of these (order matters!)"
+  [wrap-init-muuntaja
+   wrap-lowercase-request-headers
+   wrap-basic-authentication
+   wrap-parse-link-headers
+   wrap-decode-responses
+   wrap-lowercase-response-headers
+   wrap-okhttp-request-url
+   wrap-origin-header-if-websocket
+   wrap-okhttp-request-body
+   wrap-okhttp-request-headers
+   wrap-okhttp-response-body
+   wrap-okhttp-response-headers
+   wrap-okhttp-request-response])
 
+(defn combine-middleware-chains [middleware1 middleware2]
+  (let [m (meta middleware2)]
+    (cond
+      (empty? m) (into middleware2 middleware1)
+      (true? (:replace m)) middleware2
+      (true? (:append m)) (into middleware1 middleware2)
+      (true? (:prepend m)) (into middleware2 middleware1))))
+
+(defonce per-client-middleware
+  (utils/weakly-memoize-by-key
+    (fn [_ middleware]
+      (combine-middleware-chains default-middleware (or middleware [])))
+    (fn [client _] client)))
+
+(defn compile-middleware
+  [client handler request]
+  (let [global-mw (per-client-middleware client [])]
+    (->> (rseq (if (not-empty (:middleware request))
+                 (combine-middleware-chains global-mw (:middleware request))
+                 global-mw))
+         (reduce #(%2 %1) handler))))
