@@ -1,9 +1,9 @@
 (ns clj-okhttp.okhttp
-  (:require [muuntaja.protocols :as mpro]
-            [clojure.string :as strings]
-            [clojure.java.io :as io])
+  (:require [clojure.string :as strings]
+            [clojure.java.io :as io]
+            [clj-okhttp.ssl :as ssl])
   (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder FormBody FormBody$Builder MultipartBody MultipartBody$Builder RequestBody MediaType]
-           [java.time Instant]
+           [java.time Instant Duration]
            [java.util Date]
            [java.io FilterInputStream InputStream File]
            [clojure.lang IPersistentMap MultiFn]
@@ -173,7 +173,8 @@
     (let [{:keys [pins]} certificate-pinner
           builder (CertificatePinner$Builder.)]
       (doseq [{:keys [pattern pin]} pins]
-        (.add builder pattern pin)))
+        (.add builder pattern pin))
+      (.build builder))
     :otherwise
     (throw (IllegalArgumentException.))))
 
@@ -241,18 +242,44 @@
       :otherwise
       nil)))
 
+(defn- add-interceptors [^OkHttpClient$Builder builder interceptors]
+  (doseq [interceptor interceptors]
+    (.addInterceptor builder (->interceptor interceptor)))
+  builder)
+
+(defn- add-networkInterceptors [^OkHttpClient$Builder builder interceptors]
+  (doseq [interceptor interceptors]
+    (.addNetworkInterceptor builder (->interceptor interceptor)))
+  builder)
+
+(defn- add-client-server-certs [^OkHttpClient$Builder builder server-certificates client-certificate client-key]
+  (let [trust-managers     (ssl/trust-managers server-certificates)
+        key-managers       (ssl/key-managers client-certificate client-key)
+        socket-factory     (ssl/ssl-socket-factory trust-managers key-managers)
+        x509-trust-manager (first (filter clj-okhttp.ssl/x509-trust-manager? trust-managers))]
+    (.sslSocketFactory builder socket-factory x509-trust-manager)))
+
+(defn- add-server-certs [^OkHttpClient$Builder builder server-certificates]
+  (let [trust-managers     (ssl/trust-managers server-certificates)
+        socket-factory     (ssl/ssl-socket-factory trust-managers nil)
+        x509-trust-manager (first (filter ssl/x509-trust-manager? trust-managers))]
+    (.sslSocketFactory builder socket-factory x509-trust-manager)))
+
+(defn- ^Duration ->duration [x]
+  (if (instance? Duration x) x (Duration/ofMillis x)))
+
 (defn ->http-client ^OkHttpClient
   [{:keys [dispatcher connection-pool interceptors network-interceptors event-listener-factory
            retry-on-connection-failure authenticator follow-redirects follow-ssl-redirects cookie-jar
            cache dns proxy proxy-selector proxy-authenticator socket-factory ssl-socket-factory
            x509-trust-manager connection-specs protocols hostname-verifier certificate-pinner
            call-timeout connect-timeout read-timeout write-timeout ping-interval
-           min-websocket-message-to-compress]}]
+           min-websocket-message-to-compress server-certificates client-certificate client-key]}]
   (cond-> (OkHttpClient$Builder.)
     (some? dispatcher) (.dispatcher (->dispatcher dispatcher))
     (some? connection-pool) (.connectionPool (->connection-pool connection-pool))
-    (not-empty interceptors) (as-> $ (doseq [i interceptors] (.addInterceptor $ (->interceptor i))) $)
-    (not-empty network-interceptors) (as-> $ (doseq [i interceptors] (.addNetworkInterceptor $ (->interceptor i))) $)
+    (not-empty interceptors) (add-interceptors interceptors)
+    (not-empty network-interceptors) (add-networkInterceptors network-interceptors)
     (some? event-listener-factory) (.eventListenerFactory (->event-listener-factory event-listener-factory))
     (some? retry-on-connection-failure) (.retryOnConnectionFailure retry-on-connection-failure)
     (some? authenticator) (.authenticator (->authenticator authenticator))
@@ -265,15 +292,18 @@
     (some? proxy-selector) (.proxySelector proxy-selector)
     (some? proxy-authenticator) (.proxyAuthenticator (->authenticator proxy-authenticator))
     (some? socket-factory) (.socketFactory socket-factory)
+    (and (some? ssl-socket-factory) (nil? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory)
     (and (some? ssl-socket-factory) (some? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory x509-trust-manager)
+    (and (nil? ssl-socket-factory) server-certificates client-certificate client-key) (add-client-server-certs server-certificates client-certificate client-key)
+    (and (nil? ssl-socket-factory) server-certificates (nil? client-certificate) (nil? client-key)) (add-server-certs server-certificates)
     (not-empty connection-specs) (.connectionSpecs (mapv ->connection-spec connection-specs))
     (not-empty protocols) (.protocols (mapv ->protocol protocols))
     (some? hostname-verifier) (.hostnameVerifier (->hostname-verifier hostname-verifier))
     (some? certificate-pinner) (.certificatePinner (->certificate-pinner certificate-pinner))
-    (some? call-timeout) (.callTimeout 0 TimeUnit/MILLISECONDS)
-    (some? connect-timeout) (.connectTimeout connect-timeout TimeUnit/MILLISECONDS)
-    (some? read-timeout) (.readTimeout read-timeout TimeUnit/MILLISECONDS)
-    (some? write-timeout) (.writeTimeout write-timeout TimeUnit/MILLISECONDS)
-    (some? ping-interval) (.pingInterval ping-interval TimeUnit/MILLISECONDS)
+    (some? call-timeout) (.callTimeout (->duration call-timeout))
+    (some? connect-timeout) (.connectTimeout (->duration connect-timeout))
+    (some? read-timeout) (.readTimeout (->duration read-timeout))
+    (some? write-timeout) (.writeTimeout (->duration write-timeout))
+    (some? ping-interval) (.pingInterval (->duration ping-interval))
     (some? min-websocket-message-to-compress) (.minWebSocketMessageToCompress min-websocket-message-to-compress)
     :always (.build)))
