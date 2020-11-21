@@ -11,7 +11,8 @@
            [okhttp3.internal.io FileSystem]
            [javax.net.ssl HostnameVerifier]
            [okio BufferedSink]
-           [muuntaja.protocols StreamableResponse]))
+           [muuntaja.protocols StreamableResponse]
+           [okhttp3.internal.http HttpMethod]))
 
 
 (defn ->url ^HttpUrl [url query-params]
@@ -50,11 +51,15 @@
     (persistent! (reduce reduction (transient {}) (range (.size headers))))))
 
 (defn ->request ^Request [{:keys [request-method body headers url] :as req}]
-  (.build
-    (doto (Request$Builder.)
-      (.method (strings/upper-case (name request-method)) body)
-      (.headers headers)
-      (.url ^HttpUrl url))))
+  (let [method (strings/upper-case (name request-method))]
+    (.build
+      (doto (Request$Builder.)
+        (.method method
+          (if (HttpMethod/requiresRequestBody method)
+            (or body (RequestBody/create (byte-array 0) nil))
+            body))
+        (.headers headers)
+        (.url ^HttpUrl url)))))
 
 (defn <-response ^IPersistentMap [^Response response]
   {:status    (.code response)
