@@ -16,7 +16,7 @@ replacement. Supports per-client-instance and per-request middleware.
 
 I have tried pretty much every http client in the Clojure ecosystem and couldn't find anything that satisfied everything
 I want. [hato](https://github.com/gnarroway/hato) comes pretty close but it's only Java 11+, uses cheshire, and I prefer 
-a more explicit public API.
+a more explicit public API. I always had a pleasant experience with OkHttp in a past life when I mostly wrote Java.
 
 - Support for true raw response streaming. 
 - Stop reading bytes from the server if I close the response stream before reading all content.
