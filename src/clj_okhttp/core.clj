@@ -19,7 +19,16 @@
    (create-client {}))
   (^OkHttpClient [opts]
    (doto (okhttp/->http-client opts)
-     (mw/per-client-middleware (:middleware opts [])))))
+     (mw/per-client-middleware (:middleware opts []))))
+  ; clone an existing client + optionally change options and middleware
+  (^OkHttpClient [^OkHttpClient client opts]
+   (doto (okhttp/->http-client client opts)
+     (mw/per-client-middleware
+       (with-meta
+         (mw/combine-middleware-chains
+           (mw/per-client-middleware client [])
+           (:middleware opts []))
+         {:replace true})))))
 
 (defn request*
   "Executes a http request. Requests consist of clojure data in the same style

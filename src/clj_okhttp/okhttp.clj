@@ -55,9 +55,9 @@
     (.build
       (doto (Request$Builder.)
         (.method method
-          (if (HttpMethod/requiresRequestBody method)
-            (or body (RequestBody/create (byte-array 0) nil))
-            body))
+                 (if (HttpMethod/requiresRequestBody method)
+                   (or body (RequestBody/create (byte-array 0) nil))
+                   body))
         (.headers headers)
         (.url ^HttpUrl url)))))
 
@@ -274,41 +274,49 @@
   (if (instance? Duration x) x (Duration/ofMillis x)))
 
 (defn ->http-client ^OkHttpClient
-  [{:keys [dispatcher connection-pool interceptors network-interceptors event-listener-factory
-           retry-on-connection-failure authenticator follow-redirects follow-ssl-redirects cookie-jar
-           cache dns proxy proxy-selector proxy-authenticator socket-factory ssl-socket-factory
-           x509-trust-manager connection-specs protocols hostname-verifier certificate-pinner
-           call-timeout connect-timeout read-timeout write-timeout ping-interval
-           min-websocket-message-to-compress server-certificates client-certificate client-key]}]
-  (cond-> (OkHttpClient$Builder.)
-    (some? dispatcher) (.dispatcher (->dispatcher dispatcher))
-    (some? connection-pool) (.connectionPool (->connection-pool connection-pool))
-    (not-empty interceptors) (add-interceptors interceptors)
-    (not-empty network-interceptors) (add-networkInterceptors network-interceptors)
-    (some? event-listener-factory) (.eventListenerFactory (->event-listener-factory event-listener-factory))
-    (some? retry-on-connection-failure) (.retryOnConnectionFailure retry-on-connection-failure)
-    (some? authenticator) (.authenticator (->authenticator authenticator))
-    (some? follow-redirects) (.followRedirects follow-redirects)
-    (some? follow-ssl-redirects) (.followSslRedirects follow-ssl-redirects)
-    (some? cookie-jar) (.cookieJar cookie-jar)
-    (some? cache) (.cache (->cache cache))
-    (some? dns) (.dns dns)
-    (some? proxy) (.proxy proxy)
-    (some? proxy-selector) (.proxySelector proxy-selector)
-    (some? proxy-authenticator) (.proxyAuthenticator (->authenticator proxy-authenticator))
-    (some? socket-factory) (.socketFactory socket-factory)
-    (and (some? ssl-socket-factory) (nil? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory)
-    (and (some? ssl-socket-factory) (some? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory x509-trust-manager)
-    (and (nil? ssl-socket-factory) server-certificates client-certificate client-key) (add-client-server-certs server-certificates client-certificate client-key)
-    (and (nil? ssl-socket-factory) server-certificates (nil? client-certificate) (nil? client-key)) (add-server-certs server-certificates)
-    (not-empty connection-specs) (.connectionSpecs (mapv ->connection-spec connection-specs))
-    (not-empty protocols) (.protocols (mapv ->protocol protocols))
-    (some? hostname-verifier) (.hostnameVerifier (->hostname-verifier hostname-verifier))
-    (some? certificate-pinner) (.certificatePinner (->certificate-pinner certificate-pinner))
-    (some? call-timeout) (.callTimeout (->duration call-timeout))
-    (some? connect-timeout) (.connectTimeout (->duration connect-timeout))
-    (some? read-timeout) (.readTimeout (->duration read-timeout))
-    (some? write-timeout) (.writeTimeout (->duration write-timeout))
-    (some? ping-interval) (.pingInterval (->duration ping-interval))
-    (some? min-websocket-message-to-compress) (.minWebSocketMessageToCompress min-websocket-message-to-compress)
-    :always (.build)))
+  ([options]
+   (->http-client (OkHttpClient$Builder.) options))
+  ([builder {:keys [dispatcher connection-pool interceptors network-interceptors event-listener-factory
+                    retry-on-connection-failure authenticator follow-redirects follow-ssl-redirects cookie-jar
+                    cache dns proxy proxy-selector proxy-authenticator socket-factory ssl-socket-factory
+                    x509-trust-manager connection-specs protocols hostname-verifier certificate-pinner
+                    call-timeout connect-timeout read-timeout write-timeout ping-interval
+                    min-websocket-message-to-compress server-certificates client-certificate client-key]}]
+   (cond-> (cond
+             (instance? OkHttpClient$Builder builder)
+             builder
+             (instance? OkHttpClient builder)
+             (.newBuilder ^OkHttpClient builder)
+             :otherwise
+             (throw (IllegalArgumentException. (format "Don't know how to create a OkHttpClient$Builder from %s" (str (class builder))))))
+     (some? dispatcher) (.dispatcher (->dispatcher dispatcher))
+     (some? connection-pool) (.connectionPool (->connection-pool connection-pool))
+     (not-empty interceptors) (add-interceptors interceptors)
+     (not-empty network-interceptors) (add-networkInterceptors network-interceptors)
+     (some? event-listener-factory) (.eventListenerFactory (->event-listener-factory event-listener-factory))
+     (some? retry-on-connection-failure) (.retryOnConnectionFailure retry-on-connection-failure)
+     (some? authenticator) (.authenticator (->authenticator authenticator))
+     (some? follow-redirects) (.followRedirects follow-redirects)
+     (some? follow-ssl-redirects) (.followSslRedirects follow-ssl-redirects)
+     (some? cookie-jar) (.cookieJar cookie-jar)
+     (some? cache) (.cache (->cache cache))
+     (some? dns) (.dns dns)
+     (some? proxy) (.proxy proxy)
+     (some? proxy-selector) (.proxySelector proxy-selector)
+     (some? proxy-authenticator) (.proxyAuthenticator (->authenticator proxy-authenticator))
+     (some? socket-factory) (.socketFactory socket-factory)
+     (and (some? ssl-socket-factory) (nil? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory)
+     (and (some? ssl-socket-factory) (some? x509-trust-manager)) (.sslSocketFactory ssl-socket-factory x509-trust-manager)
+     (and (nil? ssl-socket-factory) server-certificates client-certificate client-key) (add-client-server-certs server-certificates client-certificate client-key)
+     (and (nil? ssl-socket-factory) server-certificates (nil? client-certificate) (nil? client-key)) (add-server-certs server-certificates)
+     (not-empty connection-specs) (.connectionSpecs (mapv ->connection-spec connection-specs))
+     (not-empty protocols) (.protocols (mapv ->protocol protocols))
+     (some? hostname-verifier) (.hostnameVerifier (->hostname-verifier hostname-verifier))
+     (some? certificate-pinner) (.certificatePinner (->certificate-pinner certificate-pinner))
+     (some? call-timeout) (.callTimeout (->duration call-timeout))
+     (some? connect-timeout) (.connectTimeout (->duration connect-timeout))
+     (some? read-timeout) (.readTimeout (->duration read-timeout))
+     (some? write-timeout) (.writeTimeout (->duration write-timeout))
+     (some? ping-interval) (.pingInterval (->duration ping-interval))
+     (some? min-websocket-message-to-compress) (.minWebSocketMessageToCompress min-websocket-message-to-compress)
+     :always (.build))))
