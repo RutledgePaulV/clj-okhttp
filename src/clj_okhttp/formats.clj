@@ -40,13 +40,23 @@
       (some? request-body) (assoc :body request-body)
       (some? content-type) (assoc-in [:headers "content-type"] content-type))))
 
-(defn format-response [{:keys [muuntaja] :as request} {:keys [body] :as response}]
-  (let [response-content-type (get-in response [:headers "content-type"])
-        negotiated            ^FormatAndCharset
-                              (negotiate-content-type muuntaja response-content-type)]
+(defn resolve-content-type [content-type]
+  (case content-type
+    :stream "application/octet-stream"
+    :csv "text/csv"
+    :json "application/json"
+    :yaml "application/yaml"
+    :edn "application/edn"
+    :clojure "application/edn"
+    :transit "application/transit+json"
+    (or content-type "application/octet-stream")))
+
+(defn format-stream [muuntaja content-type stream]
+  (let [resolved   (resolve-content-type content-type)
+        negotiated ^FormatAndCharset (negotiate-content-type muuntaja resolved)]
     (if-some [decoder (m/decoder muuntaja (.-format negotiated))]
-      (assoc response :body (decoder body (.-charset negotiated)))
-      (assoc response :body body))))
+      (decoder stream (.-charset negotiated))
+      stream)))
 
 (def defaults
   (assoc m/default-options :return :output-stream))

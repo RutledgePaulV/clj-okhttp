@@ -56,23 +56,23 @@
     (request-transformer handler init-muuntaja)))
 
 (defn wrap-decode-responses [handler]
-  (fn decode-response-handler
-    ([request]
-     (let [response (handler request)]
-       (if (not= (:as request) :stream)
-         (mun/format-response request response)
-         response)))
-    ([request respond raise]
-     (handler request
-              (fn [response]
-                (try
-                  (respond
-                    (if (not= (:as request) :stream)
-                      (mun/format-response request response)
-                      response))
-                  (catch Throwable e
-                    (raise e))))
-              raise))))
+  (letfn [(prepare-response [{:keys [muuntaja as]} {:keys [body] :as response}]
+            (if (some? as)
+              (let [decoded (mun/format-stream muuntaja as body)]
+                (assoc response :body decoded))
+              (let [as      (get-in response [:headers "content-type"])
+                    decoded (mun/format-stream muuntaja as body)]
+                (assoc response :body decoded))))]
+    (fn decode-response-handler
+      ([request]
+       (prepare-response request (handler request)))
+      ([request respond raise]
+       (handler request
+                (fn [response]
+                  (try
+                    (respond (prepare-response request response))
+                    (catch Throwable e (raise e))))
+                raise)))))
 
 (defn wrap-okhttp-request-body [handler]
   (request-transformer handler mun/format-request))
