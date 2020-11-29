@@ -3,9 +3,9 @@
   (:import [java.security.cert CertificateFactory Certificate]
            [java.security KeyFactory KeyStore SecureRandom]
            [javax.net.ssl TrustManagerFactory KeyManagerFactory SSLContext X509TrustManager]
-           [java.security.spec PKCS8EncodedKeySpec]
            [java.util UUID Base64]
-           [java.io ByteArrayInputStream]))
+           [java.io ByteArrayInputStream IOException]
+           [java.security.spec RSAPrivateCrtKeySpec PKCS8EncodedKeySpec]))
 
 (defn pem-body [s]
   (strings/join ""
@@ -21,7 +21,7 @@
 (defn base64-string->stream [^String contents]
   (ByteArrayInputStream. (base64-string->bytes contents)))
 
-(defn pem-stream [s]
+(defn pem-stream ^ByteArrayInputStream [s]
   (base64-string->stream (pem-body s)))
 
 (defonce rsa-factory
@@ -42,13 +42,65 @@
                 (.init ks))]
     (.getTrustManagers tf)))
 
+(defn parse-der [^bytes bites]
+  (loop [fields [] stream (ByteArrayInputStream. bites)]
+    (let [tag (.read stream)]
+      (if-not (neg? tag)
+        (let [length
+              (let [length-of-length (.read stream)]
+                (if-not (neg? length-of-length)
+                  (if (zero? (bit-and-not length-of-length 0x7F))
+                    length-of-length
+                    (let [buf-length (bit-and length-of-length 0x7F)
+                          buffer     (byte-array buf-length)]
+                      (when (< (.read stream buffer) buf-length)
+                        (throw (IOException. "Invalid DER.")))
+                      (.intValue (BigInteger. 1 buffer))))
+                  (throw (IOException. "Invalid DER."))))
+              buffer
+              (byte-array length)]
+          (when (< (.read stream buffer) length)
+            (throw (IOException. "Invalid DER.")))
+          (recur (conj fields buffer) stream))
+        fields))))
+
+(defn decode-pkcs1 [^bytes client-key-bites]
+  (let [content (parse-der client-key-bites)
+        [_
+         modulus
+         public-exponent private-exponent
+         prime-p prime-q
+         prime-exponent-p prime-exponent-q
+         crt-coefficient]
+        (map #(BigInteger. ^bytes %) (parse-der (first content)))
+        spec    (RSAPrivateCrtKeySpec.
+                  modulus
+                  public-exponent private-exponent
+                  prime-p prime-q
+                  prime-exponent-p prime-exponent-q
+                  crt-coefficient)]
+    (.generatePrivate rsa-factory spec)))
+
+(defn decode-pkcs8 [^bytes client-key-bites]
+  (let [spec (PKCS8EncodedKeySpec. client-key-bites)]
+    (.generatePrivate rsa-factory spec)))
+
+(defn decode-private-key [client-key]
+  (cond
+    (bytes? client-key)
+    (try
+      (decode-pkcs8 client-key)
+      (catch Exception e
+        (decode-pkcs1 client-key)))
+    (string? client-key)
+    (recur (.readAllBytes (pem-stream client-key)))))
+
 (defn key-managers [client-certificate client-key]
   (let [cert-chain  (with-open [stream (pem-stream client-certificate)]
                       (let [^"[Ljava.security.cert.Certificate;" ar (make-array Certificate 0)]
                         (.toArray (.generateCertificates x509-factory stream) ar)))
-        private-key (with-open [stream (pem-stream client-key)]
-                      (.generatePrivate rsa-factory (PKCS8EncodedKeySpec. stream)))
-        password    (str (UUID/randomUUID))
+        private-key (decode-private-key client-key)
+        password    (.toCharArray (str (UUID/randomUUID)))
         key-store   (doto (KeyStore/getInstance (KeyStore/getDefaultType))
                       (.load nil)
                       (.setKeyEntry "cert" private-key password cert-chain))
