@@ -13,8 +13,8 @@
   "Creates a OkHttpClient instance with the specified options. Simple options can be
    expressed with clojure data but you may need to construct OkHttp object instances
    for the larger http client plugins. Note that you probably should not be using
-   OkHttp interceptors and instead should provide your own ring-style middleware
-   when making requests (so you can act on data representations instead of objects)."
+   OkHttp interceptors and should instead provide your own ring-style middleware as
+   the 'middleware' option. Middleware can be set per-client instance and per-request."
   (^OkHttpClient []
    (create-client {}))
   (^OkHttpClient [opts]
