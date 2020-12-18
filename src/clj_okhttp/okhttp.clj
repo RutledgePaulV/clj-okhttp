@@ -1,7 +1,8 @@
 (ns clj-okhttp.okhttp
   (:require [clojure.string :as strings]
             [clojure.java.io :as io]
-            [clj-okhttp.ssl :as ssl])
+            [clj-okhttp.ssl :as ssl]
+            [muuntaja.protocols :as mp])
   (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder FormBody FormBody$Builder MultipartBody MultipartBody$Builder RequestBody MediaType]
            [java.time Instant Duration]
            [java.util Date]

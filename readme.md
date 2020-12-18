@@ -1,7 +1,7 @@
 [![travisci](https://travis-ci.com/rutledgepaulv/clj-okhttp.svg?branch=master)](https://travis-ci.com/rutledgepaulv/clj-okhttp)
 [![clojars](https://img.shields.io/clojars/v/clj-okhttp/clj-okhttp.svg)](https://clojars.org/clj-okhttp)
 [![codecov](https://codecov.io/gh/rutledgepaulv/clj-okhttp/branch/master/graph/badge.svg)](https://codecov.io/gh/rutledgepaulv/clj-okhttp)
-[![cljdoc](https://cljdoc.org/badge/clj-okhttp/clj-okhttp)](https://cljdoc.org/d/clj-okhttp/clj-okhttp/CURRENT)
+[![cljdoc](https://cljdoc.org/badge/clj-okhttp/clj-okhttp)](https://cljdoc.org/d/clj-okhttp/clj-okhttp/0.1.0-SNAPSHOT)
 
 ### What
 
@@ -19,5 +19,5 @@ I want. [hato](https://github.com/gnarroway/hato) comes darn close but it's only
 more explicit public API. I always had a pleasant experience with OkHttp in a past life when I primarily wrote Java.
 
 
-### [Documentation](https://cljdoc.org/d/org.clojars.rutledgepaulv/clj-okhttp/CURRENT)
+### [Documentation](https://cljdoc.org/d/clj-okhttp/clj-okhttp/0.1.0-SNAPSHOT)
 
