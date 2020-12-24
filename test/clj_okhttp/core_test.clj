@@ -6,7 +6,7 @@
   (:refer-clojure :exclude [get])
   (:import [okhttp3 Response Call]))
 
-(def test-client (create-client))
+(def test-client (create-client {:connect-timeout 2000}))
 
 
 (deftest format-request-and-response-test
@@ -75,6 +75,17 @@
     (is (= 200 (:status response)))
     (is (= {:authenticated true :user "user"} (:body response)))))
 
+
+(deftest cloning
+  (let [cloned (create-client test-client {:read-timeout 1})]
+    (is (= 1 (.readTimeoutMillis cloned)))
+    (is (= 2000 (.connectTimeoutMillis cloned)))))
+
+(deftest response-handling
+  (is (map? (caselet-response
+              [{:keys [body]} (get test-client "https://httpbin.org/get")]
+              200 body
+              false))))
 
 (deftest websocket-test
   (let [upgrade-request

@@ -134,7 +134,7 @@
     (map? cache)
     (let [{:keys [directory max-size file-system]
            :or   {file-system FileSystem/SYSTEM}} cache]
-      (Cache. directory max-size file-system))
+      (Cache. (io/file directory) max-size file-system))
     :otherwise
     (throw (IllegalArgumentException.))))
 
@@ -147,7 +147,9 @@
                   supports-tls-extensions
                   cipher-suites-as-string
                   tls-versions-as-string]} connection-spec]
-      (ConnectionSpec. is-tls supports-tls-extensions cipher-suites-as-string tls-versions-as-string))
+      (ConnectionSpec. is-tls supports-tls-extensions
+                       (into-array String cipher-suites-as-string)
+                       (into-array String tls-versions-as-string)))
     :otherwise
     (throw (IllegalArgumentException.))))
 
@@ -157,6 +159,8 @@
     protocol
     (string? protocol)
     (Protocol/get protocol)
+    (qualified-keyword? protocol)
+    (Protocol/get (str (namespace protocol) "/" (name protocol)))
     (keyword? protocol)
     (Protocol/get (name protocol))
     :otherwise

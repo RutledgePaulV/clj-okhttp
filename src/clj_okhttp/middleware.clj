@@ -153,10 +153,11 @@
 (defn combine-middleware-chains [middleware1 middleware2]
   (let [m (meta middleware2)]
     (cond
-      (empty? m) (into middleware2 middleware1)
       (true? (:replace m)) middleware2
       (true? (:append m)) (into middleware1 middleware2)
-      (true? (:prepend m)) (into middleware2 middleware1))))
+      (true? (:prepend m)) (into middleware2 middleware1)
+      :otherwise
+      (into middleware2 middleware1))))
 
 (defonce per-client-middleware
   (utils/weakly-memoize-by-key
