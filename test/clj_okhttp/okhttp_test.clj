@@ -3,7 +3,7 @@
   (:require [clj-okhttp.okhttp :refer :all]
             [clojure.java.io :as io])
   (:import [javax.net.ssl HostnameVerifier]
-           [okhttp3 CertificatePinner Protocol ConnectionSpec Cache Authenticator EventListener EventListener$Factory Interceptor ConnectionPool Dispatcher FormBody MultipartBody RequestBody]
+           [okhttp3 CertificatePinner Protocol ConnectionSpec Cache Authenticator EventListener EventListener$Factory Interceptor ConnectionPool Dispatcher FormBody MultipartBody RequestBody OkHttpClient]
            [java.util.concurrent Executors]
            [java.io OutputStream ByteArrayInputStream]))
 
@@ -127,3 +127,12 @@
     (is (instance? RequestBody body)))
   (let [body (->request-body "application/json" (io/file (io/resource "server/server_cert.pem")))]
     (is (instance? RequestBody body))))
+
+(deftest ->http-client-test
+  (let [server-certificate (slurp (io/resource "server/server_cert.pem"))
+        client-certificate (slurp (io/resource "client/client_cert.pem"))
+        client-key         (slurp (io/resource "client/private/client_key.pem"))
+        client             (->http-client {:server-certificates [server-certificate]
+                                           :client-certificate  client-certificate
+                                           :client-key          client-key})]
+    (is (instance? OkHttpClient client))))
