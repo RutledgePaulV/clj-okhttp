@@ -30,6 +30,9 @@
    [metosin/jsonista "0.2.7"]
    [com.squareup.okhttp3/okhttp "4.9.0"]]
 
+  :profiles
+  {:dev {:resource-paths ["testfiles"]}}
+
   :plugins
   [[lein-cloverage "1.1.2"]]
 

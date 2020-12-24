@@ -41,6 +41,11 @@
       (is (= 200 (:status response)))
       (is (= ["^ " "~:test" "stuff"] (get-in response [:body :json]))))))
 
+(deftest link-parsing
+  (let [request  {:query-params {:Link "<https://example.com>; rel=\"preconnect\""}}
+        response (get test-client "https://httpbin.org/response-headers" request)]
+    (is (= {:preconnect {:href "https://example.com"}} (:links response)))))
+
 (deftest asynchronous
   (testing "get"
     (let [res     (promise)

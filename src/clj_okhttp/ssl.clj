@@ -1,10 +1,11 @@
 (ns clj-okhttp.ssl
-  (:require [clojure.string :as strings])
+  (:require [clojure.string :as strings]
+            [clojure.java.io :as io])
   (:import [java.security.cert CertificateFactory Certificate]
            [java.security KeyFactory KeyStore SecureRandom]
            [javax.net.ssl TrustManagerFactory KeyManagerFactory SSLContext X509TrustManager]
            [java.util UUID Base64]
-           [java.io ByteArrayInputStream IOException]
+           [java.io ByteArrayInputStream IOException ByteArrayOutputStream]
            [java.security.spec RSAPrivateCrtKeySpec PKCS8EncodedKeySpec]))
 
 (defn pem-body [s]
@@ -85,6 +86,11 @@
   (let [spec (PKCS8EncodedKeySpec. client-key-bites)]
     (.generatePrivate rsa-factory spec)))
 
+(defn stream->bytes [stream]
+  (with-open [in stream out (ByteArrayOutputStream.)]
+    (io/copy in out)
+    (.toByteArray out)))
+
 (defn decode-private-key [client-key]
   (cond
     (bytes? client-key)
@@ -93,7 +99,7 @@
       (catch Exception e
         (decode-pkcs1 client-key)))
     (string? client-key)
-    (recur (.readAllBytes (pem-stream client-key)))))
+    (recur (stream->bytes (pem-stream client-key)))))
 
 (defn key-managers [client-certificate client-key]
   (let [cert-chain  (with-open [stream (pem-stream client-certificate)]
