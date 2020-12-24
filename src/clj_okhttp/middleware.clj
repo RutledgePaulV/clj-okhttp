@@ -166,7 +166,7 @@
 
 (defn compile-middleware
   [client handler request]
-  (let [global-mw (per-client-middleware client [])]
+  (let [global-mw (or (per-client-middleware client []) default-middleware)]
     (->> (rseq (if (not-empty (:middleware request))
                  (combine-middleware-chains global-mw (:middleware request))
                  global-mw))

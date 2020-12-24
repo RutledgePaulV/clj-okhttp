@@ -1,5 +1,5 @@
 (ns clj-okhttp.utilities
-  (:import [java.util Base64]
+  (:import [java.util Base64 Base64$Encoder]
            [okhttp3 HttpUrl]
            [java.lang.ref ReferenceQueue WeakReference]
            [java.util.concurrent ConcurrentHashMap]
@@ -17,10 +17,10 @@
 
 (defn basic-auth [username password]
   (let [bites
-        (.encode
+        (.encode ^Base64$Encoder
           (Base64/getEncoder)
-          (.getBytes (str username ":" password)))]
-    (str "Basic " (String. bites "UTF-8"))))
+          (.getBytes ^String (str username ":" password)))]
+    (str "Basic " (String. ^bytes bites "UTF-8"))))
 
 (defn url->origin [^HttpUrl url]
   (if

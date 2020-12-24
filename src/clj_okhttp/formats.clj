@@ -6,20 +6,18 @@
 
 (set! *warn-on-reflection* true)
 
-(let [negotiate (deref #'muuntaja.core/-negotiate-content-type)]
-  (def negotiate-content-type
-    (parse/fast-memoize 1000
-      (fn [muuntaja content-type]
-        (negotiate muuntaja content-type)))))
+(def negotiate-content-type
+  (parse/fast-memoize 1000
+    (fn [muuntaja content-type]
+      (#'muuntaja.core/-negotiate-content-type muuntaja content-type))))
 
-(defn get-intended-content-type [{:keys [multipart form-params] :as request}]
-  (let [headers (get-in request [:headers])]
-    (if-some [header (find headers "content-type")]
-      (val header)
-      (or
-        (when (some? form-params) "application/x-www-form-urlencoded")
-        (when (some? multipart) "multipart/form-data")
-        "application/octet-stream"))))
+(defn get-intended-content-type [{:keys [multipart form-params headers]}]
+  (if-some [header (find headers "content-type")]
+    (val header)
+    (or
+      (when (some? form-params) "application/x-www-form-urlencoded")
+      (when (some? multipart) "multipart/form-data")
+      "application/octet-stream")))
 
 (defn format-request [{:keys [muuntaja multipart form-params body] :as request}]
   (let [content-type (get-intended-content-type request)

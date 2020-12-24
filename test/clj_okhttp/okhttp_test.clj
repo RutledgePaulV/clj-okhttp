@@ -4,7 +4,7 @@
 
 (deftest ->url-test
   (testing "path params are encoded"
-    (let [url       ["https://google.com" "thing stuff" "search"]
+    (let [url       ["https://google.com" "thing stuff" :search]
           qp        {}
           http-url  (->url url qp)
           as-string (str http-url)]
@@ -16,6 +16,13 @@
           http-url  (->url url qp)
           as-string (str http-url)]
       (is (= "https://google.com/search?q=thing%20stuff" as-string))))
+
+  (testing "multi valued query params are encoded"
+    (let [url       ["https://google.com" "search"]
+          qp        {:q ["thing stuff" :more]}
+          http-url  (->url url qp)
+          as-string (str http-url)]
+      (is (= "https://google.com/search?q=thing%20stuff&q=more" as-string))))
 
   (testing "relative paths are allowed"
     (let [url       "https://google.com/search/../stuff"

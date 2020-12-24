@@ -30,8 +30,8 @@
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]
           (.addPathSegment builder (if (keyword? segment) (name segment) (str segment))))
-        (doseq [[k v] query-params]
-          (.addQueryParameter builder (name k) (if (keyword? v) (name v) (str v))))
+        (doseq [[k v] query-params v' (if (coll? v) v [v])]
+          (.addQueryParameter builder (name k) (if (keyword? v') (name v') (str v'))))
         (.build builder))
       http-url)))
 

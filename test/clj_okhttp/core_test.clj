@@ -1,11 +1,12 @@
 (ns clj-okhttp.core-test
   (:require [clojure.test :refer :all]
             [clj-okhttp.core :refer :all]
-            [muuntaja.core :as m])
+            [muuntaja.core :as m]
+            [clojure.string :as strings])
   (:refer-clojure :exclude [get])
-  (:import [okhttp3 Response]))
+  (:import [okhttp3 Response Call]))
 
-(defonce test-client (create-client))
+(def test-client (create-client))
 
 
 (deftest format-request-and-response-test
@@ -40,6 +41,28 @@
       (is (= 200 (:status response)))
       (is (= ["^ " "~:test" "stuff"] (get-in response [:body :json]))))))
 
+(deftest asynchronous
+  (testing "get"
+    (let [res     (promise)
+          respond (partial deliver res)
+          raise   (partial deliver res)
+          call    (get test-client "https://httpbin.org/get" {} respond raise)]
+      (is (instance? Call call))
+      (let [response (deref res)]
+        (is (= 200 (:status response)))
+        (is (not-empty (:body response)))))))
+
+(deftest content-encodings
+  (testing "gzip"
+    (let [response (get test-client "https://httpbin.org/gzip")]
+      (is (:gzipped (:body response))))))
+
+(deftest streaming-response
+  (let [request  {:as :stream}
+        response (get test-client "https://httpbin.org/get" request)]
+    (is (= 200 (:status response)))
+    (is (instance? java.io.InputStream (:body response)))
+    (is (not (strings/blank? (slurp (:body response)))))))
 
 (deftest basic-auth
   (let [request  {:basic-auth ["user" "password"]}
