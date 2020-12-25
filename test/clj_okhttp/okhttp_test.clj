@@ -3,9 +3,11 @@
   (:require [clj-okhttp.okhttp :refer :all]
             [clojure.java.io :as io])
   (:import [javax.net.ssl HostnameVerifier]
-           [okhttp3 CertificatePinner Protocol ConnectionSpec Cache Authenticator EventListener EventListener$Factory Interceptor ConnectionPool Dispatcher FormBody MultipartBody RequestBody OkHttpClient]
+           [okhttp3 CertificatePinner Protocol ConnectionSpec Cache Authenticator EventListener EventListener$Factory Interceptor ConnectionPool Dispatcher FormBody MultipartBody RequestBody OkHttpClient Headers]
            [java.util.concurrent Executors]
-           [java.io OutputStream ByteArrayInputStream]))
+           [java.io OutputStream ByteArrayInputStream]
+           [java.util Date]
+           [java.time Instant]))
 
 (deftest ->url-test
   (testing "path params are encoded"
@@ -75,6 +77,14 @@
                 :tls-versions-as-string  []})]
     (is (instance? ConnectionSpec spec))
     (is (identical? spec (->connection-spec spec)))))
+
+(deftest ->headers-test
+  (let [headers (->headers {:LastModified  (Date.)
+                            :ExpiresAt     (Instant/now)
+                            :Demonstration "Test"
+                            :Other         1000})]
+    (is (instance? Headers headers))
+    (is (= 4 (.size headers)))))
 
 (deftest ->cache-test
   (let [cache (->cache {:directory "/" :max-size 10})]

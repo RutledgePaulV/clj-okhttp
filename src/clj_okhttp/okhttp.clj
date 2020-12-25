@@ -36,14 +36,13 @@
       http-url)))
 
 (defn ->headers ^Headers [headers]
-  (let [builder (Headers$Builder.)
-        grouped (group-by (comp class val) headers)]
-    (doseq [[k v] (get grouped Date)]
-      (.add builder (name k) ^Date v))
-    (doseq [[k v] (get grouped Instant)]
-      (.add builder (name k) ^Instant v))
-    (doseq [[k v] (get grouped String)]
-      (.add builder (name k) ^String v))
+  (let [builder (Headers$Builder.)]
+    (doseq [[k v] headers]
+      (cond
+        (instance? Date v) (.add builder (name k) ^Date v)
+        (instance? Instant v) (.add builder (name k) ^Instant v)
+        :otherwise
+        (.add builder (name k) ^String (if (keyword? v) (name v) (str v)))))
     (.build builder)))
 
 (defn <-headers ^IPersistentMap [^Headers headers]
