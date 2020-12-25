@@ -257,7 +257,7 @@
     (.addInterceptor builder (->interceptor interceptor)))
   builder)
 
-(defn- add-networkInterceptors [^OkHttpClient$Builder builder interceptors]
+(defn- add-network-interceptors [^OkHttpClient$Builder builder interceptors]
   (doseq [interceptor interceptors]
     (.addNetworkInterceptor builder (->interceptor interceptor)))
   builder)
@@ -297,7 +297,7 @@
      (some? dispatcher) (.dispatcher (->dispatcher dispatcher))
      (some? connection-pool) (.connectionPool (->connection-pool connection-pool))
      (not-empty interceptors) (add-interceptors interceptors)
-     (not-empty network-interceptors) (add-networkInterceptors network-interceptors)
+     (not-empty network-interceptors) (add-network-interceptors network-interceptors)
      (some? event-listener-factory) (.eventListenerFactory (->event-listener-factory event-listener-factory))
      (some? retry-on-connection-failure) (.retryOnConnectionFailure retry-on-connection-failure)
      (some? authenticator) (.authenticator (->authenticator authenticator))

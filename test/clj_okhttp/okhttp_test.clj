@@ -129,10 +129,26 @@
     (is (instance? RequestBody body))))
 
 (deftest ->http-client-test
-  (let [server-certificate (slurp (io/resource "server/server_cert.pem"))
-        client-certificate (slurp (io/resource "client/client_cert.pem"))
-        client-key         (slurp (io/resource "client/private/client_key.pem"))
-        client             (->http-client {:server-certificates [server-certificate]
-                                           :client-certificate  client-certificate
-                                           :client-key          client-key})]
-    (is (instance? OkHttpClient client))))
+
+  (testing "mutual tls"
+    (let [server-certificate (slurp (io/resource "server/server_cert.pem"))
+          client-certificate (slurp (io/resource "client/client_cert.pem"))
+          client-key         (slurp (io/resource "client/private/client_key.pem"))
+          client             (->http-client
+                               {:server-certificates [server-certificate]
+                                :client-certificate  client-certificate
+                                :client-key          client-key})]
+      (is (instance? OkHttpClient client))))
+
+  (testing "server certificate only"
+    (let [server-certificate (slurp (io/resource "server/server_cert.pem"))
+          client             (->http-client {:server-certificates [server-certificate]})]
+      (is (instance? OkHttpClient client))))
+
+  (testing "interceptors"
+    (let [client (->http-client {:interceptors [(fn [chain])]})]
+      (is (instance? OkHttpClient client))))
+
+  (testing "network interceptors"
+    (let [client (->http-client {:network-interceptors [(fn [chain])]})]
+      (is (instance? OkHttpClient client)))))
