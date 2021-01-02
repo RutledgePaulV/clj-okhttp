@@ -76,6 +76,12 @@
     (is (= 200 (:status response)))
     (is (= {:authenticated true :user "user"} (:body response)))))
 
+(deftest forms
+  (let [request  {:form-params {:test "something"}
+                  :headers     {"content-type" "application/x-www-form-urlencoded"}}
+        response (post test-client "https://httpbin.org/post" request)]
+    (is (= 200 (:status response)))
+    (is (= {:test "something"} (get-in response [:body :form])))))
 
 (deftest cloning
   (let [cloned (create-client test-client {:read-timeout 1})]

@@ -7,7 +7,7 @@
            [java.util.concurrent Executors]
            [java.io OutputStream ByteArrayInputStream]
            [java.util Date]
-           [java.time Instant]))
+           [java.time Instant Duration]))
 
 (deftest ->url-test
   (testing "path params are encoded"
@@ -53,12 +53,14 @@
 (deftest ->hostname-verifier-test
   (let [verifier (->hostname-verifier (fn [hostname session] true))]
     (is (instance? HostnameVerifier verifier))
-    (is (identical? verifier (->hostname-verifier verifier)))))
+    (is (identical? verifier (->hostname-verifier verifier)))
+    (is (nil? (->hostname-verifier nil)))))
 
 (deftest ->certificate-pinner-test
   (let [pinner (->certificate-pinner {:pins []})]
     (is (instance? CertificatePinner pinner))
-    (is (identical? pinner (->certificate-pinner pinner)))))
+    (is (identical? pinner (->certificate-pinner pinner)))
+    (is (nil? (->certificate-pinner nil)))))
 
 (deftest ->protocol-test
   (let [proto (->protocol "http/1.0")]
@@ -76,41 +78,48 @@
                 :cipher-suites-as-string []
                 :tls-versions-as-string  []})]
     (is (instance? ConnectionSpec spec))
-    (is (identical? spec (->connection-spec spec)))))
+    (is (identical? spec (->connection-spec spec)))
+    (is (nil? (->connection-spec nil)))))
 
 (deftest ->headers-test
   (let [headers (->headers {:LastModified  (Date.)
                             :ExpiresAt     (Instant/now)
                             :Demonstration "Test"
+                            :Another       :Test
                             :Other         1000})]
     (is (instance? Headers headers))
-    (is (= 4 (.size headers)))))
+    (is (= 5 (.size headers)))))
 
 (deftest ->cache-test
   (let [cache (->cache {:directory "/" :max-size 10})]
     (is (instance? Cache cache))
-    (is (identical? cache (->cache cache)))))
+    (is (identical? cache (->cache cache)))
+    (is (nil? (->cache nil)))))
 
 (deftest ->authenticator-test
   (let [authenticator (->authenticator (fn [route response] nil))]
     (is (instance? Authenticator authenticator))
-    (is (identical? authenticator (->authenticator authenticator)))))
+    (is (identical? authenticator (->authenticator authenticator)))
+    (is (nil? (->authenticator nil)))))
 
 (deftest ->event-listener-factory-test
   (let [factory (->event-listener-factory
                   (fn [call] (proxy [EventListener] [])))]
     (is (instance? EventListener$Factory factory))
-    (is (identical? factory (->event-listener-factory factory)))))
+    (is (identical? factory (->event-listener-factory factory)))
+    (is (nil? (->event-listener-factory nil)))))
 
 (deftest ->interceptor-test
   (let [interceptor (->interceptor (fn [chain]))]
     (is (instance? Interceptor interceptor))
-    (is (identical? interceptor (->interceptor interceptor)))))
+    (is (identical? interceptor (->interceptor interceptor)))
+    (is (nil? (->interceptor nil)))))
 
 (deftest ->connection-pool-test
   (let [pool (->connection-pool {})]
     (is (instance? ConnectionPool pool))
-    (is (identical? pool (->connection-pool pool)))))
+    (is (identical? pool (->connection-pool pool)))
+    (is (nil? (->connection-pool nil)))))
 
 (deftest ->dispatcher-test
   (let [dispatcher (->dispatcher
@@ -161,4 +170,10 @@
 
   (testing "network interceptors"
     (let [client (->http-client {:network-interceptors [(fn [chain])]})]
+      (is (instance? OkHttpClient client))))
+
+  (testing "timeouts"
+    (let [client (->http-client {:write-timeout   (Duration/ofSeconds 10)
+                                 :read-timeout    (Duration/ofSeconds 10)
+                                 :connect-timeout (Duration/ofSeconds 10)})]
       (is (instance? OkHttpClient client)))))
