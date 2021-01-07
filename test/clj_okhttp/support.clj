@@ -14,9 +14,9 @@
   (delay (start-httpbin)))
 
 (defn get-base-url
-  ([] (get-base-url test-httpbin))
-  ([container]
+  ([] (get-base-url (force test-httpbin)))
+  ([^GenericContainer container]
    (str "http://"
-        (.getContainerIpAddress (force container))
+        (.getContainerIpAddress container)
         ":"
-        (.getMappedPort (force container) 80))))
+        (.getMappedPort container 80))))

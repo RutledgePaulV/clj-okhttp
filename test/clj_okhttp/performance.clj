@@ -39,7 +39,7 @@
     (map? (:body response))))
 
 
-(deftest small-file-performance
+(deftest ^:performance small-file-performance
   (let [[clj-http clj-okhttp]
         (crit/with-progress-reporting
           (crit/benchmark-round-robin
@@ -52,7 +52,7 @@
     (is (< (-> clj-okhttp :lower-q first) (-> clj-http :lower-q first)))
     (is (< (-> clj-okhttp :upper-q first) (-> clj-http :upper-q first)))))
 
-(deftest json-performance
+(deftest ^:performance json-performance
   (let [[clj-http clj-okhttp]
         (crit/with-progress-reporting
           (crit/benchmark-round-robin
