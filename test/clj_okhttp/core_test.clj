@@ -2,7 +2,8 @@
   (:require [clojure.test :refer :all]
             [clj-okhttp.core :refer :all]
             [muuntaja.core :as m]
-            [clojure.string :as strings])
+            [clojure.string :as strings]
+            [clj-okhttp.support :as sup])
   (:refer-clojure :exclude [get])
   (:import [okhttp3 Response Call]
            [okio ByteString]))
@@ -18,7 +19,7 @@
            :muuntaja (assoc m/default-options :return :input-stream)
            :headers  {"content-type" "application/json"}}
           response
-          (patch test-client "https://httpbin.org/patch" input-stream-body)]
+          (patch test-client [(sup/get-base-url) "patch"] input-stream-body)]
       (is (= 200 (:status response)))
       (is (= {:test "stuff"} (get-in response [:body :json])))))
 
@@ -28,7 +29,7 @@
            :muuntaja (assoc m/default-options :return :output-stream)
            :headers  {"content-type" "application/edn"}}
           response
-          (patch test-client "https://httpbin.org/patch" output-stream-body)]
+          (patch test-client [(sup/get-base-url) "patch"] output-stream-body)]
       (is (= 200 (:status response)))
       (is (= (pr-str {:test "stuff"}) (get-in response [:body :data])))))
 
@@ -38,7 +39,7 @@
            :muuntaja (assoc m/default-options :return :bytes)
            :headers  {"content-type" "application/transit+json"}}
           response
-          (patch test-client "https://httpbin.org/patch" bytes-body)]
+          (patch test-client [(sup/get-base-url) "patch"] bytes-body)]
       (is (= 200 (:status response)))
       (is (= ["^ " "~:test" "stuff"] (get-in response [:body :json]))))))
 
@@ -52,7 +53,7 @@
     (let [res     (promise)
           respond (partial deliver res)
           raise   (partial deliver res)
-          call    (get test-client "https://httpbin.org/get" {} respond raise)]
+          call    (get test-client [(sup/get-base-url) "get"] {} respond raise)]
       (is (instance? Call call))
       (let [response (deref res)]
         (is (= 200 (:status response)))
@@ -60,26 +61,26 @@
 
 (deftest content-encodings
   (testing "gzip"
-    (let [response (get test-client "https://httpbin.org/gzip")]
+    (let [response (get test-client [(sup/get-base-url) "gzip"])]
       (is (:gzipped (:body response))))))
 
 (deftest streaming-response
   (let [request  {:as :stream}
-        response (get test-client "https://httpbin.org/get" request)]
+        response (get test-client [(sup/get-base-url) "get"] request)]
     (is (= 200 (:status response)))
     (is (instance? java.io.InputStream (:body response)))
     (is (not (strings/blank? (slurp (:body response)))))))
 
 (deftest basic-auth
   (let [request  {:basic-auth ["user" "password"]}
-        response (get test-client "https://httpbin.org/basic-auth/user/password" request)]
+        response (get test-client [(sup/get-base-url) "basic-auth" "user" "password"] request)]
     (is (= 200 (:status response)))
     (is (= {:authenticated true :user "user"} (:body response)))))
 
 (deftest forms
   (let [request  {:form-params {:test "something"}
                   :headers     {"content-type" "application/x-www-form-urlencoded"}}
-        response (post test-client "https://httpbin.org/post" request)]
+        response (post test-client [(sup/get-base-url) "post"] request)]
     (is (= 200 (:status response)))
     (is (= {:test "something"} (get-in response [:body :form])))))
 
@@ -90,7 +91,7 @@
 
 (deftest response-handling
   (is (map? (caselet-response
-              [{:keys [body]} (get test-client "https://httpbin.org/get")]
+              [{:keys [body]} (get test-client [(sup/get-base-url) "get"])]
               200 body
               false))))
 

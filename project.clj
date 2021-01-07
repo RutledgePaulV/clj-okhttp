@@ -31,7 +31,12 @@
    [com.squareup.okhttp3/okhttp "4.9.0"]]
 
   :profiles
-  {:dev {:resource-paths ["testfiles"]}}
+  {:test {:resource-paths ["testfiles"]
+          :dependencies   [[clj-http "3.10.3"]
+                           [cheshire "5.10.0"]
+                           [criterium "0.4.5"]
+                           [org.testcontainers/testcontainers "1.15.0"]
+                           [org.slf4j/slf4j-simple "1.7.30"]]}}
 
   :plugins
   [[lein-cloverage "1.1.2"]]
