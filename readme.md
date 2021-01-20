@@ -36,11 +36,11 @@ instance and per-request.
 
 #### do the right thing by default
 
-clj-okhttp tries to just do the right/safe thing for you instead of requiring configuration options for common cases.
+clj-okhttp tries to just do the right thing for you instead of requiring configuration options for common cases.
 
 - connection pooling is automatic
 - you can supply pem-encoded keys/certificates instead of messing with java crypto classes
-- it decodes response data for you based on the content type of the response by default
+- it decodes response data for you based on the content type of the response (by default)
 - it has default read/write/connection timeouts instead of infinite timeouts like some other http clients
 
 #### no globals or dynamic vars

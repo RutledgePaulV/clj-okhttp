@@ -6,7 +6,8 @@
             [clj-okhttp.support :as sup])
   (:refer-clojure :exclude [get])
   (:import [okhttp3 Response Call]
-           [okio ByteString]))
+           [okio ByteString]
+           [java.io InputStream]))
 
 (def test-client (create-client {:connect-timeout 2000}))
 
@@ -88,6 +89,17 @@
   (let [cloned (create-client test-client {:read-timeout 1})]
     (is (= 1 (.readTimeoutMillis cloned)))
     (is (= 2000 (.connectTimeoutMillis cloned)))))
+
+(deftest large
+  (let [request  {:as :stream}
+        length   102400
+        response (get test-client [(sup/get-base-url) "bytes" length] request)]
+    (is (= length (with-open [body (:body response)]
+                    (loop [sum 0]
+                      (let [bite (.read ^InputStream body)]
+                        (if (neg? bite)
+                          sum
+                          (recur (inc sum))))))))))
 
 (deftest response-handling
   (is (map? (caselet-response

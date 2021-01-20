@@ -30,7 +30,7 @@
            (:middleware opts []))
          {:replace true})))))
 
-(defn request*
+(defn request
   "Executes a http request. Requests consist of clojure data in the same style
    as other http client libraries like okhttp.
 
@@ -58,59 +58,59 @@
 (defn get
   "Executes a http get request."
   (^Map [^OkHttpClient client url]
-   (request* client {:request-method :get :url url}))
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :get :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :get :url url) respond raise)))
+   (request client {:request-method :get :url url}))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :get :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :get :url url) respond raise)))
 
 (defn head
   "Executes a http head request."
   (^Map [^OkHttpClient client url]
-   (request* client {:request-method :head :url url}))
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :head :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :head :url url) respond raise)))
+   (request client {:request-method :head :url url}))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :head :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :head :url url) respond raise)))
 
 (defn options
   "Executes a http options request."
   (^Map [^OkHttpClient client url]
-   (request* client {:request-method :options :url url}))
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :options :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :options :url url) respond raise)))
+   (request client {:request-method :options :url url}))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :options :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :options :url url) respond raise)))
 
 (defn put
   "Executes a http put request."
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :put :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :put :url url) respond raise)))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :put :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :put :url url) respond raise)))
 
 (defn patch
   "Executes a http patch request."
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :patch :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :patch :url url) respond raise)))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :patch :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :patch :url url) respond raise)))
 
 (defn post
   "Executes a http post request."
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :post :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :post :url url) respond raise)))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :post :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :post :url url) respond raise)))
 
 (defn delete
   "Executes a http delete request."
   (^Map [^OkHttpClient client url]
-   (request* client {:request-method :delete :url url}))
-  (^Map [^OkHttpClient client url request]
-   (request* client (assoc request :request-method :delete :url url)))
-  (^Call [^OkHttpClient client url request respond raise]
-   (request* client (assoc request :request-method :delete :url url) respond raise)))
+   (request client {:request-method :delete :url url}))
+  (^Map [^OkHttpClient client url req]
+   (request client (assoc req :request-method :delete :url url)))
+  (^Call [^OkHttpClient client url req respond raise]
+   (request client (assoc req :request-method :delete :url url) respond raise)))
 
 (defn connect
   "Opens a websocket connection using the provided http upgrade request.
@@ -125,7 +125,7 @@
    on the open socket. Callbacks also receive this same instance so they can
    easily send replies to the other end of the socket.
    "
-  (^WebSocket [^OkHttpClient client request
+  (^WebSocket [^OkHttpClient client req
                {:keys [on-open on-bytes on-text on-closing on-closed on-failure]
                 :or   {on-open    (fn default-on-open [socket response])
                        on-bytes   (fn default-on-bytes [socket message])
@@ -133,7 +133,7 @@
                        on-closing (fn default-on-closing [socket code reason])
                        on-closed  (fn default-on-closed [socket code reason])
                        on-failure (fn default-on-failure [socket exception response])}}]
-   (let [handler     (fn upgrade-request-handler [request respond raise]
+   (let [handler     (fn upgrade-request-handler [req respond raise]
                        (let [listener
                              (proxy [WebSocketListener] []
                                (onOpen [socket response]
@@ -150,9 +150,9 @@
                                (onFailure [socket throwable response]
                                  (on-failure socket throwable response)
                                  (raise throwable)))]
-                         (.newWebSocket client request listener)))
-         handler+mw  (mw/compile-middleware client handler request)
-         upgrade-req (-> request
+                         (.newWebSocket client req listener)))
+         handler+mw  (mw/compile-middleware client handler req)
+         upgrade-req (-> req
                          (assoc :as :stream)
                          (update :request-method #(or % :get))
                          (assoc-in [:headers "upgrade"] "websocket"))
