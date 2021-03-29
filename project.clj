@@ -1,4 +1,4 @@
-(defproject clj-okhttp/clj-okhttp "0.1.0"
+(defproject clj-okhttp/clj-okhttp "0.1.1-SNAPSHOT"
 
   :description
   "A fast and lightweight clojure http client constructed on top of OkHttp."
