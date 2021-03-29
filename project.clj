@@ -26,17 +26,17 @@
 
   :dependencies
   [[org.clojure/clojure "1.10.1"]
-   [metosin/muuntaja "0.6.7"]
-   [metosin/jsonista "0.2.7"]
-   [com.squareup.okhttp3/okhttp "4.9.0"]]
+   [metosin/muuntaja "0.6.8"]
+   [metosin/jsonista "0.3.1"]
+   [com.squareup.okhttp3/okhttp "4.9.1"]]
 
   :profiles
   {:test {:resource-paths ["testfiles"]
-          :dependencies   [[clj-http "3.10.3"]
+          :dependencies   [[clj-http "3.12.1"]
                            [cheshire "5.10.0"]
-                           [criterium "0.4.5"]
+                           [criterium "0.4.6"]
                            [org.slf4j/slf4j-simple "1.7.30"]
-                           [org.testcontainers/testcontainers "1.15.0"]]}}
+                           [org.testcontainers/testcontainers "1.15.2"]]}}
 
   :cloverage
   {:selector [:coverage]}
