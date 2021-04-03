@@ -8,7 +8,11 @@
   (doto (GenericContainer. "kennethreitz/httpbin:latest")
     (.withExposedPorts (into-array Integer [(int 80)]))
     (.setPortBindings ["8080:80"])
-    (.waitingFor (HttpWaitStrategy.))
+    (.waitingFor (doto (HttpWaitStrategy.)
+                   (.forPath "/get")
+                   (.forPort 80)
+                   (.withMethod "GET")
+                   (.forStatusCode 200)))
     (.start)))
 
 (defonce test-httpbin

@@ -25,7 +25,7 @@
    ["snapshots" :clojars]]
 
   :dependencies
-  [[org.clojure/clojure "1.10.1"]
+  [[org.clojure/clojure "1.10.3"]
    [metosin/muuntaja "0.6.8"]
    [metosin/jsonista "0.3.1"]
    [com.squareup.okhttp3/okhttp "4.9.1"]]
