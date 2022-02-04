@@ -188,17 +188,15 @@
     :otherwise
     (throw (IllegalArgumentException.))))
 
-
 (declare ->request-body)
-
 
 (defn ->multipart-body ^MultipartBody [parts]
   (let [builder (doto (MultipartBody$Builder.)
                   (.setType (MediaType/parse
                               (or (some-> parts meta :mime-type)
                                   "multipart/form-data"))))]
-    (doseq [{:keys [name content part-name mime-type]} parts]
-      (.addFormDataPart builder (or part-name name) name (->request-body mime-type content)))
+    (doseq [{:keys [name content part-name mime-type file-name]} parts]
+      (.addFormDataPart builder (or part-name name) file-name (->request-body mime-type content)))
     (.build builder)))
 
 (defn ->form-body ^FormBody [body]
@@ -208,49 +206,50 @@
     (.build builder)))
 
 (defn ->request-body ^RequestBody [content-type content]
-  (let [media (MediaType/parse (or content-type "application/octet-stream"))]
-    (cond
-      (nil? content) nil
+  (cond
+    (nil? content) nil
 
-      (instance? RequestBody content)
-      content
+    (instance? RequestBody content)
+    content
 
-      (and (= "application/x-www-form-urlencoded" content-type) (map? content))
-      (->form-body content)
+    (and (= "application/x-www-form-urlencoded" content-type) (map? content))
+    (->form-body content)
 
-      (and (= "multipart/form-data" content-type) (vector? content))
-      (->multipart-body content)
+    (and (= "multipart/form-data" content-type) (vector? content))
+    (->multipart-body content)
 
-      (or (instance? StreamableResponse content)
-          (fn? content)
-          (instance? MultiFn content))
+    (or (instance? StreamableResponse content)
+        (fn? content)
+        (instance? MultiFn content))
+    (let [media (MediaType/parse (or content-type "application/octet-stream"))]
       (proxy [RequestBody] []
         (contentLength [] -1)
         (contentType [] media)
         (writeTo [^BufferedSink sink]
           (content (.outputStream sink)))
-        (isOneShot [] true))
+        (isOneShot [] true)))
 
-      (instance? InputStream content)
+    (instance? InputStream content)
+    (let [media (MediaType/parse (or content-type "application/octet-stream"))]
       (proxy [RequestBody] []
         (contentLength [] -1)
         (contentType [] media)
         (writeTo [^BufferedSink sink]
           (with-open [in ^InputStream content]
             (io/copy in (.outputStream sink))))
-        (isOneShot [] true))
+        (isOneShot [] true)))
 
-      (string? content)
-      (RequestBody/create ^String content media)
+    (string? content)
+    (RequestBody/create ^String content (MediaType/parse (or content-type "text/plain")))
 
-      (bytes? content)
-      (RequestBody/create ^bytes content media)
+    (bytes? content)
+    (RequestBody/create ^bytes content (MediaType/parse (or content-type "application/octet-stream")))
 
-      (instance? File content)
-      (RequestBody/create ^File content media)
+    (instance? File content)
+    (RequestBody/create ^File content (MediaType/parse (or content-type "application/octet-stream")))
 
-      :otherwise
-      nil)))
+    :else
+    nil))
 
 (defn- add-interceptors [^OkHttpClient$Builder builder interceptors]
   (doseq [interceptor interceptors]
