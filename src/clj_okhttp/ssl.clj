@@ -1,9 +1,9 @@
 (ns clj-okhttp.ssl
   (:require [clojure.string :as strings]
             [clojure.java.io :as io])
-  (:import [java.security.cert CertificateFactory Certificate]
+  (:import [java.security.cert CertificateFactory Certificate X509Certificate]
            [java.security KeyFactory KeyStore SecureRandom]
-           [javax.net.ssl TrustManagerFactory KeyManagerFactory SSLContext X509TrustManager]
+           [javax.net.ssl TrustManagerFactory KeyManagerFactory SSLContext X509TrustManager TrustManager KeyManager]
            [java.util UUID Base64]
            [java.io ByteArrayInputStream IOException ByteArrayOutputStream]
            [java.security.spec RSAPrivateCrtKeySpec PKCS8EncodedKeySpec]))
@@ -120,5 +120,16 @@
 (defn ssl-socket-factory [trust-managers key-managers]
   (.getSocketFactory
     (doto (SSLContext/getInstance "TLS")
-      (.init key-managers trust-managers (SecureRandom.)))))
+      (.init (into-array KeyManager key-managers)
+             (into-array TrustManager trust-managers)
+             (SecureRandom.)))))
 
+(def trust-all-certs-trust-manager
+  (reify X509TrustManager
+    (checkClientTrusted [_ _chain _authType])
+    (checkServerTrusted [_ _chain _authType])
+    (getAcceptedIssuers [_]
+      (into-array X509Certificate []))))
+
+(def trust-all-certs-ssl-socket-factory
+  (ssl-socket-factory [trust-all-certs-trust-manager] nil))

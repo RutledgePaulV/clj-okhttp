@@ -286,7 +286,8 @@
                     cache dns proxy proxy-selector proxy-authenticator socket-factory ssl-socket-factory
                     x509-trust-manager connection-specs protocols hostname-verifier certificate-pinner
                     call-timeout connect-timeout read-timeout write-timeout ping-interval
-                    min-websocket-message-to-compress server-certificates client-certificate client-key]}]
+                    min-websocket-message-to-compress server-certificates client-certificate client-key
+                    insecure?]}]
    (let [^OkHttpClient$Builder final-builder
          (cond
            (instance? OkHttpClient$Builder builder)
@@ -355,4 +356,9 @@
        (.pingInterval final-builder (->duration ping-interval)))
      (when (some? min-websocket-message-to-compress)
        (.minWebSocketMessageToCompress final-builder min-websocket-message-to-compress))
+     (when insecure?
+       (.sslSocketFactory final-builder ssl/trust-all-certs-ssl-socket-factory ssl/trust-all-certs-trust-manager)
+       (.hostnameVerifier final-builder (reify HostnameVerifier
+                                          (verify [_ _hostname _session]
+                                            true))))
      (.build final-builder))))
