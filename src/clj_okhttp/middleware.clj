@@ -57,12 +57,8 @@
 
 (defn wrap-decode-responses [handler]
   (letfn [(prepare-response [{:keys [muuntaja as]} {:keys [body] :as response}]
-            (if (some? as)
-              (let [decoded (mun/format-stream muuntaja as body)]
-                (assoc response :body decoded))
-              (let [as      (get-in response [:headers "content-type"])
-                    decoded (mun/format-stream muuntaja as body)]
-                (assoc response :body decoded))))]
+            (let [decoded (mun/format-stream muuntaja (get-in response [:headers "content-type"]) as body)]
+              (assoc response :body decoded)))]
     (fn decode-response-handler
       ([request]
        (prepare-response request (handler request)))
