@@ -146,7 +146,7 @@ By default the client will have a connect/read/write timeout of 10s and no call 
 
 #### Allowing self-signed certificates
 
-While not recommended (useful for testing), you can ignore all self signed certificates via the `:insecure` flag.
+While not recommended (useful for testing), you can ignore all self signed certificates via the `:insecure?` flag.
 
 ```clojure
 {:insecure? true}
