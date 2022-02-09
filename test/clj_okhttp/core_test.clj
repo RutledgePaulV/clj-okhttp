@@ -3,7 +3,8 @@
             [clj-okhttp.core :refer :all]
             [muuntaja.core :as m]
             [clojure.string :as strings]
-            [clj-okhttp.support :as sup])
+            [clj-okhttp.support :as sup]
+            [clojure.string :as str])
   (:refer-clojure :exclude [get])
   (:import [okhttp3 Response Call]
            [okio ByteString]
@@ -108,22 +109,20 @@
               false))))
 
 (deftest websocket-test
-  (let [upgrade-request
-        {:url "https://echo.websocket.org" :request-method :get}
-        open-promise
-        (promise)
-        message-promise
-        (promise)
-        bites-promise
-        (promise)
-        socket
-        (connect test-client upgrade-request
-                 {:on-open  (fn [socket response]
-                              (deliver open-promise response))
-                  :on-text  (fn [socket message]
-                              (deliver message-promise message))
-                  :on-bytes (fn [socket bites]
-                              (deliver bites-promise bites))})]
+  (let [upgrade-request {:url            (sup/get-base-wss-url)
+                         :request-method :get}
+        open-promise    (promise)
+        message-promise (promise)
+        bites-promise   (promise)
+        socket          (connect test-client
+                                 upgrade-request
+                                 {:on-open  (fn [_socket response]
+                                              (deliver open-promise response))
+                                  :on-text  (fn [_socket message]
+                                              (when-not (str/includes? message "Request served by")
+                                                (deliver message-promise message)))
+                                  :on-bytes (fn [_socket bites]
+                                              (deliver bites-promise bites))})]
     (try
       (let [response ^Response (deref open-promise)]
         (is (= 101 (.code response)))
