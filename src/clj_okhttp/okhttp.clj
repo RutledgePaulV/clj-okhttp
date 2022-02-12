@@ -2,12 +2,13 @@
   (:require [clojure.string :as strings]
             [clojure.java.io :as io]
             [clj-okhttp.ssl :as ssl]
-            [muuntaja.protocols :as mp])
+            [muuntaja.protocols :as mp]
+            [clj-okhttp.utilities :as utils])
   (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder FormBody FormBody$Builder MultipartBody MultipartBody$Builder RequestBody MediaType]
            [java.time Instant Duration]
            [java.util Date]
            [java.io FilterInputStream InputStream File]
-           [clojure.lang IPersistentMap MultiFn Named]
+           [clojure.lang IPersistentMap MultiFn]
            [java.util.concurrent TimeUnit]
            [okhttp3.internal.io FileSystem]
            [javax.net.ssl HostnameVerifier]
@@ -16,26 +17,6 @@
            [okhttp3.internal.http HttpMethod]))
 
 (set! *warn-on-reflection* true)
-
-(defn flatten-query-params [params]
-  (letfn [(to-string [x]
-            (if (instance? Named x) (name x) (str x)))
-          (flatten-map [m path]
-            (reduce-kv
-              (fn [result k v]
-                (cond
-                  (map? v)
-                  (merge result (flatten-map v (conj path k)))
-                  (coll? v)
-                  (merge result (flatten-map (zipmap (range) v) (conj path k)))
-                  :otherwise
-                  (let [[top & remainder] (conj path k)]
-                    (if (empty? remainder)
-                      (assoc result (to-string top) (to-string v))
-                      (assoc result (str (to-string top) "[" (strings/join "][" (map to-string remainder)) "]") (to-string v))))))
-              {}
-              m))]
-    (flatten-map params [])))
 
 (defn ->url ^HttpUrl [url query-params]
   (let [[^HttpUrl http-url segments]
@@ -51,7 +32,7 @@
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]
           (.addPathSegment builder (if (keyword? segment) (name segment) (str segment))))
-        (doseq [[k v] (flatten-query-params query-params)]
+        (doseq [[k v] (utils/flatten-query-params query-params)]
           (.addQueryParameter builder k v))
         (.build builder))
       http-url)))

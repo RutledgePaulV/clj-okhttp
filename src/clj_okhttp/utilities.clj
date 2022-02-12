@@ -1,9 +1,11 @@
 (ns clj-okhttp.utilities
+  (:require [clojure.string :as strings])
   (:import [java.util Base64 Base64$Encoder]
            [okhttp3 HttpUrl]
            [java.lang.ref ReferenceQueue WeakReference]
            [java.util.concurrent ConcurrentHashMap]
-           [java.util.function Function]))
+           [java.util.function Function]
+           (clojure.lang Named)))
 
 (set! *warn-on-reflection* true)
 
@@ -15,11 +17,32 @@
       (persistent! (reduce-kv f* (transient (or (empty m) {})) m))
       (meta m))))
 
+(defn flatten-query-params [params]
+  (letfn [(to-string [x]
+            (if (instance? Named x) (name x) (str x)))
+          (flatten-map [m path]
+            (reduce-kv
+              (fn [result k v]
+                (cond
+                  (map? v)
+                  (merge result (flatten-map v (conj path k)))
+                  (coll? v)
+                  (merge result (flatten-map (zipmap (range) v) (conj path k)))
+                  :otherwise
+                  (let [[top & remainder] (conj path k)]
+                    (if (empty? remainder)
+                      (assoc result (to-string top) (to-string v))
+                      (assoc result (str (to-string top) "[" (strings/join "][" (map to-string remainder)) "]")
+                                    (to-string v))))))
+              {}
+              m))]
+    (flatten-map params [])))
+
 (defn basic-auth [username password]
   (let [bites
         (.encode ^Base64$Encoder
-          (Base64/getEncoder)
-          (.getBytes ^String (str username ":" password)))]
+                 (Base64/getEncoder)
+                 (.getBytes ^String (str username ":" password)))]
     (str "Basic " (String. ^bytes bites "UTF-8"))))
 
 (defn url->origin [^HttpUrl url]
