@@ -32,7 +32,10 @@
     (mapcat (fn [x] (->paths x path)) x))
   Object
   (->paths [x path]
-    [[path x]]))
+    [[path x]])
+  nil
+  (->paths [x path]
+    [[path nil]]))
 
 (defn ->string [x]
   (if (instance? Named x) (name x) (str x)))
