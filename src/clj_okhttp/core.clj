@@ -32,7 +32,7 @@
 
 (defn request
   "Executes a http request. Requests consist of clojure data in the same style
-   as other http client libraries like okhttp.
+   as other http client libraries like clj-http.
 
    The 2 arity invokes a synchronous request and returns a response map.
 

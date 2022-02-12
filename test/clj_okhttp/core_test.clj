@@ -47,7 +47,7 @@
 
 (deftest link-parsing
   (let [request  {:query-params {:Link "<https://example.com>; rel=\"preconnect\""}}
-        response (get test-client "https://httpbin.org/response-headers" request)]
+        response (get test-client [(sup/get-base-url) "response-headers"] request)]
     (is (= {:preconnect {:href "https://example.com"}} (:links response)))))
 
 (deftest asynchronous
@@ -70,7 +70,7 @@
   (let [request  {:as :stream}
         response (get test-client [(sup/get-base-url) "get"] request)]
     (is (= 200 (:status response)))
-    (is (instance? java.io.InputStream (:body response)))
+    (is (instance? InputStream (:body response)))
     (is (not (strings/blank? (slurp (:body response)))))))
 
 (deftest basic-auth
