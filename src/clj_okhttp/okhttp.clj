@@ -32,7 +32,7 @@
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]
           (.addPathSegment builder (if (keyword? segment) (name segment) (str segment))))
-        (doseq [[k v] (utils/flatten-query-params query-params)]
+        (doseq [[k values] (utils/flatten-query-params query-params) v values]
           (.addQueryParameter builder k v))
         (.build builder))
       http-url)))
