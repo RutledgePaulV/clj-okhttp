@@ -41,7 +41,7 @@
   (if (instance? Named x) (name x) (str x)))
 
 (defn flatten-query-params [params]
-  (->> (->paths params [])
+  (->> (->paths (or params {}) [])
        (reduce
          (fn [agg [path value]]
            (update agg path (fnil conj []) value))
