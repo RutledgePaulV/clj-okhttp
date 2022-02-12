@@ -7,7 +7,7 @@
            [java.time Instant Duration]
            [java.util Date]
            [java.io FilterInputStream InputStream File]
-           [clojure.lang IPersistentMap MultiFn]
+           [clojure.lang IPersistentMap MultiFn Named]
            [java.util.concurrent TimeUnit]
            [okhttp3.internal.io FileSystem]
            [javax.net.ssl HostnameVerifier]
@@ -16,6 +16,26 @@
            [okhttp3.internal.http HttpMethod]))
 
 (set! *warn-on-reflection* true)
+
+(defn flatten-query-params [params]
+  (letfn [(to-string [x]
+            (if (instance? Named x) (name x) (str x)))
+          (flatten-map [m path]
+            (reduce-kv
+              (fn [result k v]
+                (cond
+                  (map? v)
+                  (merge result (flatten-map v (conj path k)))
+                  (coll? v)
+                  (merge result (flatten-map (zipmap (range) v) (conj path k)))
+                  :otherwise
+                  (let [[top & remainder] (conj path k)]
+                    (if (empty? remainder)
+                      (assoc result (to-string top) (to-string v))
+                      (assoc result (str (to-string top) "[" (strings/join "][" (map to-string remainder)) "]") (to-string v))))))
+              {}
+              m))]
+    (flatten-map params [])))
 
 (defn ->url ^HttpUrl [url query-params]
   (let [[^HttpUrl http-url segments]
@@ -31,8 +51,8 @@
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]
           (.addPathSegment builder (if (keyword? segment) (name segment) (str segment))))
-        (doseq [[k v] query-params v' (if (coll? v) v [v])]
-          (.addQueryParameter builder (name k) (if (keyword? v') (name v') (str v'))))
+        (doseq [[k v] (flatten-query-params query-params)]
+          (.addQueryParameter builder k v))
         (.build builder))
       http-url)))
 

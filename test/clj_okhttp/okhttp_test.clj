@@ -177,3 +177,25 @@
                                  :read-timeout    (Duration/ofSeconds 10)
                                  :connect-timeout (Duration/ofSeconds 10)})]
       (is (instance? OkHttpClient client)))))
+
+(deftest flatten-query-params-test
+  (testing "flattening of vectors"
+    (is (= {"one" "1"} (flatten-query-params {"one" "1"})))
+    (is (= {"one[0]" "1"} (flatten-query-params {"one" ["1"]}))))
+
+  (testing "fattening of maps"
+    (is (= {"one" "1"} (flatten-query-params {"one" "1"})))
+    (is (= {"one[two]" "2"} (flatten-query-params {"one" {"two" "2"}})))
+    (is (= {"one[two]" "2" "one[three]" "3"} (flatten-query-params {"one" {"two" "2" "three" "3"}}))))
+
+  (testing "flattening of mixed"
+    (is (= {"one[two][0]" "3" "one[two][1]" "4" "one[two][2][five]" "6"}
+           (flatten-query-params {"one" {"two" ["3" "4" {"five" "6"}]}}))))
+
+  (testing "keywords"
+    (is (= {"one[two][0]" "3" "one[two][1]" "4" "one[two][2][five]" "6"}
+           (flatten-query-params {:one {:two ["3" "4" {:five "6"}]}}))))
+
+  (testing "non-string-values"
+    (is (= {"one[two][0]" "3" "one[two][1]" "4" "one[two][2][five]" "6"}
+           (flatten-query-params {:one {:two [3 4 {:five 6}]}})))))
