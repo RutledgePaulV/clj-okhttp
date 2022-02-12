@@ -266,7 +266,7 @@
   (let [trust-managers     (ssl/trust-managers server-certificates)
         key-managers       (ssl/key-managers client-certificate client-key)
         socket-factory     (ssl/ssl-socket-factory trust-managers key-managers)
-        x509-trust-manager (first (filter clj-okhttp.ssl/x509-trust-manager? trust-managers))]
+        x509-trust-manager (first (filter ssl/x509-trust-manager? trust-managers))]
     (.sslSocketFactory builder socket-factory x509-trust-manager)))
 
 (defn- add-server-certs [^OkHttpClient$Builder builder server-certificates]

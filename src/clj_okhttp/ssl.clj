@@ -5,8 +5,10 @@
            [java.security KeyFactory KeyStore SecureRandom]
            [javax.net.ssl TrustManagerFactory KeyManagerFactory SSLContext X509TrustManager]
            [java.util UUID Base64]
-           [java.io ByteArrayInputStream IOException ByteArrayOutputStream]
+           [java.io ByteArrayInputStream IOException ByteArrayOutputStream InputStream]
            [java.security.spec RSAPrivateCrtKeySpec PKCS8EncodedKeySpec]))
+
+(set! *warn-on-reflection* true)
 
 (defn pem-body [s]
   (strings/join ""
@@ -22,7 +24,7 @@
 (defn base64-string->stream [^String contents]
   (ByteArrayInputStream. (base64-string->bytes contents)))
 
-(defn pem-stream ^ByteArrayInputStream [s]
+(defn pem-stream ^InputStream [s]
   (base64-string->stream (pem-body s)))
 
 (defonce rsa-factory
@@ -34,7 +36,7 @@
 (defn trust-managers [certificates]
   (let [certs (doall (for [cert (if (string? certificates) [certificates] certificates)]
                        (with-open [stream (pem-stream cert)]
-                         (.generateCertificate x509-factory stream))))
+                         (.generateCertificate ^CertificateFactory x509-factory stream))))
         ks    (doto (KeyStore/getInstance (KeyStore/getDefaultType))
                 (.load nil))
         _     (doseq [cert certs]
@@ -80,13 +82,13 @@
                   prime-p prime-q
                   prime-exponent-p prime-exponent-q
                   crt-coefficient)]
-    (.generatePrivate rsa-factory spec)))
+    (.generatePrivate ^KeyFactory rsa-factory spec)))
 
 (defn decode-pkcs8 [^bytes client-key-bites]
   (let [spec (PKCS8EncodedKeySpec. client-key-bites)]
-    (.generatePrivate rsa-factory spec)))
+    (.generatePrivate ^KeyFactory rsa-factory spec)))
 
-(defn stream->bytes [stream]
+(defn stream->bytes [^InputStream stream]
   (with-open [in stream out (ByteArrayOutputStream.)]
     (io/copy in out)
     (.toByteArray out)))
@@ -103,8 +105,7 @@
 
 (defn key-managers [client-certificate client-key]
   (let [cert-chain  (with-open [stream (pem-stream client-certificate)]
-                      (let [^"[Ljava.security.cert.Certificate;" ar (make-array Certificate 0)]
-                        (.toArray (.generateCertificates x509-factory stream) ar)))
+                      (into-array Certificate (.generateCertificates ^CertificateFactory x509-factory stream)))
         private-key (decode-private-key client-key)
         password    (.toCharArray (str (UUID/randomUUID)))
         key-store   (doto (KeyStore/getInstance (KeyStore/getDefaultType))
