@@ -35,13 +35,13 @@
     [[path x]])
   nil
   (->paths [x path]
-    [[path nil]]))
+    []))
 
 (defn ->string [x]
   (if (instance? Named x) (name x) (str x)))
 
 (defn flatten-query-params [params]
-  (->> (->paths (or params {}) [])
+  (->> (->paths params [])
        (reduce
          (fn [agg [path value]]
            (update agg path (fnil conj []) value))
