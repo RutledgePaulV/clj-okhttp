@@ -1,9 +1,11 @@
 (ns clj-okhttp.utilities
-  (:import [java.util Base64 Base64$Encoder]
+  (:require [clojure.string :as strings])
+  (:import [java.util Base64 Base64$Encoder Map List]
            [okhttp3 HttpUrl]
            [java.lang.ref ReferenceQueue WeakReference]
            [java.util.concurrent ConcurrentHashMap]
-           [java.util.function Function]))
+           [java.util.function Function]
+           (clojure.lang Named)))
 
 (set! *warn-on-reflection* true)
 
@@ -15,11 +17,47 @@
       (persistent! (reduce-kv f* (transient (or (empty m) {})) m))
       (meta m))))
 
+(defprotocol IntoPaths
+  (->paths [x path]))
+
+(extend-protocol IntoPaths
+  Map
+  (->paths [x path]
+    (mapcat
+      (fn [[k v]]
+        (->paths v ((fnil conj []) path k)))
+      x))
+  List
+  (->paths [x path]
+    (mapcat (fn [x] (->paths x path)) x))
+  Object
+  (->paths [x path]
+    [[path x]])
+  nil
+  (->paths [x path]
+    []))
+
+(defn ->string [x]
+  (if (instance? Named x) (name x) (str x)))
+
+(defn flatten-query-params [params]
+  (->> (->paths params [])
+       (reduce
+         (fn [agg [path value]]
+           (update agg path (fnil conj []) value))
+         {})
+       (reduce-kv
+         (fn [agg [top & more] v]
+           (if (empty? more)
+             (assoc agg (->string top) (map ->string v))
+             (assoc agg (str (->string top) "[" (strings/join "][" (map ->string more)) "]") (map ->string v))))
+         {})))
+
 (defn basic-auth [username password]
   (let [bites
         (.encode ^Base64$Encoder
-          (Base64/getEncoder)
-          (.getBytes ^String (str username ":" password)))]
+                 (Base64/getEncoder)
+                 (.getBytes ^String (str username ":" password)))]
     (str "Basic " (String. ^bytes bites "UTF-8"))))
 
 (defn url->origin [^HttpUrl url]

@@ -2,7 +2,8 @@
   (:require [clojure.string :as strings]
             [clojure.java.io :as io]
             [clj-okhttp.ssl :as ssl]
-            [muuntaja.protocols :as mp])
+            [muuntaja.protocols :as mp]
+            [clj-okhttp.utilities :as utils])
   (:import [okhttp3 HttpUrl Headers$Builder Request Request$Builder Headers Response ResponseBody Dispatcher ConnectionPool OkHttpClient OkHttpClient$Builder Interceptor EventListener$Factory OkHttpClient$Companion EventListener Authenticator CookieJar Dns CertificatePinner Cache ConnectionSpec Protocol CertificatePinner$Pin CertificatePinner$Builder FormBody FormBody$Builder MultipartBody MultipartBody$Builder RequestBody MediaType]
            [java.time Instant Duration]
            [java.util Date]
@@ -31,8 +32,8 @@
       (let [builder (.newBuilder http-url)]
         (doseq [segment segments]
           (.addPathSegment builder (if (keyword? segment) (name segment) (str segment))))
-        (doseq [[k v] query-params v' (if (coll? v) v [v])]
-          (.addQueryParameter builder (name k) (if (keyword? v') (name v') (str v'))))
+        (doseq [[k values] (utils/flatten-query-params query-params) v values]
+          (.addQueryParameter builder k v))
         (.build builder))
       http-url)))
 
