@@ -144,14 +144,6 @@ By default the client will have a connect/read/write timeout of 10s and no call 
 {:call-timeout 0 :connect-timeout 10000 :read-timeout 10000 :write-timeout 10000}
 ```
 
-#### Allowing self-signed certificates
-
-While not recommended (useful for testing), you can ignore all self signed certificates via the `:insecure?` flag.
-
-```clojure
-{:insecure? true}
-```
-
 #### Cookies
 
 A custom `CookieJar` may be supplied. Below is an example of an in-memory CookieJar
