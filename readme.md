@@ -240,33 +240,20 @@ is an example of how to configure your own DNS resolver.
 ### Output Coercion
 
 ```clojure
-;; The default output is a string body
+;; By default, decoding performed on the body is determined by the content type returned by the server
 (http/get client "http://example.com/foo.txt")
 
-;; Coerce as a byte-array
-(http/get client "http://example.com/favicon.ico" {:as :byte-array})
-
-;; Coerce as json
+;; decode as json
 (http/get client "http://example.com/foo.json" {:as :json})
 
-;; Coerce as Transit encoded JSON or MessagePack
+;; decode as Transit encoded JSON or MessagePack
 (http/get client "http://example.com/foo" {:as :transit+json})
 (http/get client "http://example.com/foo" {:as :transit+msgpack})
 
-;; Coerce as a clojure datastructure
-(http/get client "http://example.com/foo.clj" {:as :clojure})
-
-;; Try to automatically coerce the output based on the content-type
-;; header (this is currently a BETA feature!). Currently supports
-;; text, json and clojure (with automatic charset detection)
-;; clojure coercion requires "application/clojure" or
-;; "application/edn" in the content-type header
-(http/get client "http://example.com/foo.json" {:as :auto})
-
-;; Return the body as a stream
+;; Leave the body as a stream
 (http/get client "http://example.com/bigrequest.html" {:as :stream})
-;; Note that the connection to the server will NOT be closed until the
-;; stream has been read!
+;; Note that the connection to the server will NOT be closed until the stream has been read!
+
 ```
 
 ### Link Headers
@@ -287,9 +274,8 @@ interfaces:
 
 ```clojure
 (defn api-action [method path & [opts]]
-  (http/request
-    client
-    (merge {:request-method method :url (str "https://httpbin.org" path)} opts)))
+  (let [final-req (merge {:request-method method :url (str "https://httpbin.org" path)} opts)]
+  (http/request client final-req)))
 ```
 
 ### Middleware
@@ -319,7 +305,7 @@ OkHttp provides two different types of interceptors: Application and Network. Yo
 [here](https://square.github.io/okhttp/features/interceptors/). For example, you can roll your own logging
 interceptor
 
-```
+```clojure
 {:interceptors [(fn [^Interceptor$Chain chain]
                      (let [request (.request chain)
                            t1  (System/nanoTime)]
