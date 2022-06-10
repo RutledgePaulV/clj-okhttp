@@ -1,15 +1,17 @@
 (ns clj-okhttp.formats
   (:require [muuntaja.parse :as parse]
             [muuntaja.core :as m]
-            [clj-okhttp.okhttp :as okhttp])
-  (:import [muuntaja.core FormatAndCharset]))
+            [clj-okhttp.okhttp :as okhttp]
+            [clojure.java.io :as io])
+  (:import [muuntaja.core FormatAndCharset]
+           (java.io ByteArrayOutputStream InputStream)))
 
 (set! *warn-on-reflection* true)
 
 (def negotiate-content-type
   (parse/fast-memoize 1000
-    (fn [muuntaja content-type]
-      (#'muuntaja.core/-negotiate-content-type muuntaja content-type))))
+                      (fn [muuntaja content-type]
+                        (#'muuntaja.core/-negotiate-content-type muuntaja content-type))))
 
 (defn get-intended-content-type [{:keys [multipart form-params headers]}]
   (if-some [header (find headers "content-type")]
@@ -35,26 +37,37 @@
                                (okhttp/->request-body content-type (encoder body (.-charset negotiated)))
                                (throw (ex-info (str "No muuntaja encoder defined for " content-type) {}))))))]
     (cond-> request
-      (some? request-body) (assoc :body request-body)
-      (some? content-type) (assoc-in [:headers "content-type"] content-type))))
+            (some? request-body) (assoc :body request-body)
+            (some? content-type) (assoc-in [:headers "content-type"] content-type))))
 
-(defn resolve-content-type [content-type]
-  (case content-type
-    :stream "application/octet-stream"
-    :csv "text/csv"
-    :json "application/json"
-    :yaml "application/yaml"
-    :edn "application/edn"
-    :clojure "application/edn"
-    :transit "application/transit+json"
-    (or content-type "application/octet-stream")))
+(def coercion-mapping
+  {:csv     "text/csv"
+   :json    "application/json"
+   :yaml    "application/yaml"
+   :edn     "application/edn"
+   :clojure "application/edn"
+   :transit "application/transit+json"})
 
-(defn format-stream [muuntaja content-type stream]
-  (let [resolved   (resolve-content-type content-type)
-        negotiated ^FormatAndCharset (negotiate-content-type muuntaja resolved)]
-    (if-some [decoder (m/decoder muuntaja (.-format negotiated))]
-      (decoder stream (.-charset negotiated))
-      stream)))
+(defn coerce-stream [^InputStream stream coercion detected-charset]
+  (case coercion
+    :text (slurp stream :encoding detected-charset)
+    :stream stream
+    :byte-array (with-open [in  stream
+                            out (ByteArrayOutputStream.)]
+                  (io/copy in out)
+                  (.toByteArray out))
+    nil))
+
+(defn format-stream [muuntaja content-type-header coercion ^InputStream stream]
+  (let [resolved-content-type-header (or content-type-header "application/octet-stream")
+        ^FormatAndCharset negotiated (negotiate-content-type muuntaja resolved-content-type-header)
+        negotiated-charset           (.-charset negotiated)
+        negotiated-format            (.-format negotiated)]
+    (or (coerce-stream stream coercion negotiated-charset)
+        (if-some [decoder (m/decoder muuntaja (or (get coercion-mapping coercion)
+                                                  negotiated-format))]
+          (decoder stream negotiated-charset)
+          (coerce-stream stream :text negotiated-charset)))))
 
 (def defaults
   (assoc m/default-options :return :output-stream))
